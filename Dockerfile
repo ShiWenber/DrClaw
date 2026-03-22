@@ -1,28 +1,35 @@
 # DrClaw Dockerfile
-FROM python:3.10-slim-bookworm
-
-WORKDIR /app
+FROM python:3.11-slim-bookworm
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy project files
-COPY pyproject.toml uv.lock ./
-COPY drclaw ./drclaw
-COPY assets ./assets
-COPY scripts ./scripts
+# Create non-root user BEFORE copying files (required for --chown)
+RUN useradd -m -u 1000 drclaw
+
+WORKDIR /app
+
+# Copy project files with proper ownership
+COPY --chown=drclaw:drclaw pyproject.toml uv.lock ./
+COPY --chown=drclaw:drclaw drclaw ./drclaw
+COPY --chown=drclaw:drclaw assets ./assets
+COPY --chown=drclaw:drclaw scripts ./scripts
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -e .
 
 # Make entrypoint executable
-RUN chmod +x /app/scripts/docker-entrypoint.py
+RUN chmod +x /app/scripts/docker-entrypoint.sh
+
+# Create data directory with proper ownership
+RUN mkdir -p /data && chown drclaw:drclaw /data
 
 # Expose web port
 EXPOSE 8081
 
-USER root
+# Switch to non-root user
+USER drclaw
 
-CMD ["python", "/app/scripts/docker-entrypoint.py", "daemon"]
+CMD ["bash", "/app/scripts/docker-entrypoint.sh", "daemon"]

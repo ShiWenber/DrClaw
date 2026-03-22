@@ -28,11 +28,11 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        PYTHON_BASE_IMAGE: ${DRCLAW_PYTHON_BASE_IMAGE:-python:3.10-slim-bookworm}
+        PYTHON_BASE_IMAGE: ${DRCLAW_PYTHON_BASE_IMAGE:-python:3.11-slim-bookworm}
     container_name: drclaw
     restart: unless-stopped
     ports:
-      - "${DRCLAW_WEB_PORT:-8081}:${DRCLAW_WEB_PORT:-8081}"
+      - "${DRCLAW_WEB_PORT:-8081}:8080"
     environment:
       # Provider configuration
       - DRCLAW_PROVIDER_API_KEY=${DRCLAW_PROVIDER_API_KEY:-}
@@ -51,7 +51,7 @@ services:
       - DRCLAW_FEISHU_VERIFICATION_TOKEN=${DRCLAW_FEISHU_VERIFICATION_TOKEN:-}
       
       # Web adapter configuration
-      - DRCLAW_WEB_HOST=0.0.0.0
+      - DRCLAW_WEB_HOST=127.0.0.1
       - DRCLAW_WEB_PORT=8081
       
       # Data directory
