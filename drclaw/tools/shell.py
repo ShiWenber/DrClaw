@@ -3,6 +3,7 @@
 import asyncio
 import os
 import re
+import shlex
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -11,12 +12,17 @@ from drclaw.tools.base import Tool
 
 _MAX_OUTPUT = 10_000
 
+# Paths that should never trigger the workspace sandbox guard (e.g. /dev/null
+# used in redirections like ``2>/dev/null``).
+_SAFE_DEV_PATHS = frozenset(
+    Path(p) for p in ("/dev/null", "/dev/zero", "/dev/urandom", "/dev/random", "/dev/stdin", "/dev/stdout", "/dev/stderr")
+)
+
 
 class ExecTool(Tool):
     """Tool to execute shell commands with safety guards."""
 
     _DEFAULT_DENY: list[str] = [
-        r"\brm\s+-[rf]{1,2}\b",  # rm -r, rm -rf, rm -fr
         r"\bdel\s+/[fq]\b",  # del /f, del /q
         r"\brmdir\s+/s\b",  # rmdir /s
         r"(?:^|[;&|]\s*)format\b",  # format (standalone command only)
@@ -31,6 +37,7 @@ class ExecTool(Tool):
         self,
         timeout: int = 60,
         working_dir: Path | None = None,
+        allowed_working_dirs: list[Path] | None = None,
         deny_patterns: list[str] | None = None,
         allow_patterns: list[str] | None = None,
         restrict_to_workspace: bool = False,
@@ -39,6 +46,7 @@ class ExecTool(Tool):
     ):
         self.timeout = timeout
         self.working_dir = working_dir
+        self.allowed_working_dirs = list(allowed_working_dirs or [])
         self.deny_patterns = (
             deny_patterns if deny_patterns is not None else list(self._DEFAULT_DENY)
         )
@@ -72,8 +80,9 @@ class ExecTool(Tool):
     async def execute(self, params: dict[str, Any]) -> str:
         command: str = params["command"]
         working_dir: str | None = params.get("working_dir")
-        # working_dir from JSON is always a str; self.working_dir is Path | None.
-        cwd: str | Path = working_dir or self.working_dir or os.getcwd()
+        cwd, cwd_error = self._resolve_cwd(working_dir)
+        if cwd_error:
+            return cwd_error
         guard_error = self._guard_command(command, str(cwd))
         if guard_error:
             return guard_error
@@ -135,6 +144,25 @@ class ExecTool(Tool):
                 process.kill()
             return f"Error: executing command: {str(e)}"
 
+    def _resolve_cwd(self, working_dir: str | None) -> tuple[str | Path, str | None]:
+        """Resolve the execution cwd and keep restricted tools inside their workspace."""
+        default_cwd: str | Path = self.working_dir or os.getcwd()
+        if not self.restrict_to_workspace:
+            return working_dir or default_cwd, None
+
+        allowed_roots = self._allowed_roots(default_cwd)
+        primary_root = allowed_roots[0]
+        if working_dir is None:
+            return primary_root, None
+
+        requested = Path(working_dir).expanduser()
+        if not requested.is_absolute():
+            requested = primary_root / requested
+        resolved = requested.resolve()
+        if not self._is_within_allowed_roots(resolved, allowed_roots):
+            return "", "Error: Command blocked by safety guard (working dir outside workspace)"
+        return resolved, None
+
     def _guard_command(self, command: str, cwd: str) -> str | None:
         """Best-effort safety guard for potentially destructive commands.
 
@@ -145,6 +173,9 @@ class ExecTool(Tool):
         """
         # Pattern matching is case-insensitive — operate on the lowered string.
         lower = command.strip().lower()
+
+        if self._matches_dangerous_rm(command):
+            return "Error: Command blocked by safety guard (dangerous pattern detected)"
 
         for pattern in self.deny_patterns:
             if re.search(pattern, lower):
@@ -158,7 +189,7 @@ class ExecTool(Tool):
             if "..\\" in command or "../" in command:
                 return "Error: Command blocked by safety guard (path traversal detected)"
 
-            cwd_path = Path(cwd).resolve()
+            allowed_roots = self._allowed_roots(cwd)
             # Path extraction operates on the original command (not lowered) because
             # filesystem paths are case-sensitive on POSIX and need their original case.
             for raw in self._extract_absolute_paths(command):
@@ -166,10 +197,29 @@ class ExecTool(Tool):
                     p = Path(raw.strip()).resolve()
                 except Exception:
                     continue
-                if p.is_absolute() and cwd_path not in p.parents and p != cwd_path:
+                if (
+                    p.is_absolute()
+                    and p not in _SAFE_DEV_PATHS
+                    and not self._is_within_allowed_roots(p, allowed_roots)
+                ):
                     return "Error: Command blocked by safety guard (path outside working dir)"
 
         return None
+
+    def _allowed_roots(self, default_cwd: str | Path) -> list[Path]:
+        roots = [Path(default_cwd).resolve()]
+        for root in self.allowed_working_dirs:
+            resolved = Path(root).resolve()
+            if resolved not in roots:
+                roots.append(resolved)
+        return roots
+
+    @staticmethod
+    def _is_within_allowed_roots(path: Path, allowed_roots: list[Path]) -> bool:
+        for root in allowed_roots:
+            if path == root or root in path.parents:
+                return True
+        return False
 
     @staticmethod
     def _extract_absolute_paths(command: str) -> list[str]:
@@ -180,7 +230,55 @@ class ExecTool(Tool):
         """
         win_paths = re.findall(r"[A-Za-z]:\\[^\s\"'|><;]+", command)
         posix_paths = re.findall(r"(?:^|[\s|>])(/[^\s\"'>]+)", command)
-        return win_paths + posix_paths
+        quoted_win_paths = re.findall(r'"([A-Za-z]:\\[^"]+)"', command)
+        quoted_win_paths.extend(re.findall(r"'([A-Za-z]:\\[^']+)'", command))
+        quoted_posix_paths = re.findall(r'"(/[^"]+)"', command)
+        quoted_posix_paths.extend(re.findall(r"'(/[^']+)'", command))
+        return list(dict.fromkeys(win_paths + posix_paths + quoted_win_paths + quoted_posix_paths))
+
+    @staticmethod
+    def _matches_dangerous_rm(command: str) -> bool:
+        """Detect rm commands using force/recursive flags, including long options."""
+        try:
+            tokens = shlex.split(command, posix=True)
+        except ValueError:
+            return False
+
+        force_flags = {"-f", "--force"}
+        recursive_flags = {"-r", "-R", "--recursive"}
+        command_breaks = {";", "&&", "||", "|", "&"}
+
+        i = 0
+        while i < len(tokens):
+            token = tokens[i]
+            if token in command_breaks:
+                i += 1
+                continue
+
+            if Path(token).name != "rm":
+                i += 1
+                continue
+
+            j = i + 1
+            while j < len(tokens) and tokens[j] not in command_breaks:
+                arg = tokens[j]
+                if arg == "--":
+                    break
+                if arg.startswith("--"):
+                    if arg in force_flags or arg in recursive_flags:
+                        return True
+                    j += 1
+                    continue
+                if arg.startswith("-") and len(arg) > 1:
+                    short_flags = set(arg[1:])
+                    if "f" in short_flags or "r" in short_flags or "R" in short_flags:
+                        return True
+                    j += 1
+                    continue
+                j += 1
+            i = j + 1
+
+        return False
 
 
 class LongExecTool(ExecTool):

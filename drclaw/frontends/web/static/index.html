@@ -154,6 +154,17 @@ body {
   padding: 16px;
 }
 
+.page-note {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .empty-page {
   height: 100%;
   display: flex;
@@ -659,13 +670,80 @@ body {
 }
 
 #team-chat-panel {
-  width: 33.333%;
-  min-width: 280px;
-  max-width: 400px;
+  width: 400px;
+  min-width: 0;
+  max-width: none;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #e5e7eb;
   background: #fafafa;
+}
+
+#team-chat-resizer {
+  position: relative;
+  width: 12px;
+  flex: 0 0 12px;
+  cursor: col-resize;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98) 0%, rgba(241, 245, 249, 0.98) 100%);
+  touch-action: none;
+  overflow: visible;
+  z-index: 2;
+}
+
+#team-chat-resizer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  width: 2px;
+  background: #e5e7eb;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+
+#team-chat-resizer .chat-resizer-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 5px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, transform 0.12s ease;
+  pointer-events: none;
+}
+
+#team-chat-resizer .chat-resizer-arrow {
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid #64748b;
+  opacity: 0.95;
+}
+
+#team-chat-resizer:hover::before,
+#team-chat-resizer.active::before {
+  background: #60a5fa;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.18);
+}
+
+#team-chat-resizer:hover .chat-resizer-handle,
+#team-chat-resizer.active .chat-resizer-handle {
+  border-color: #60a5fa;
+  background: rgba(239, 246, 255, 0.98);
+  box-shadow: 0 8px 18px rgba(96, 165, 250, 0.18);
+  transform: translate(-50%, -50%) scale(1.03);
+}
+
+#team-chat-resizer:hover .chat-resizer-arrow,
+#team-chat-resizer.active .chat-resizer-arrow {
+  border-left-color: #2563eb;
 }
 
 #team-chat-header {
@@ -682,10 +760,17 @@ body {
 
 #office-area {
   flex: 1;
+  min-width: 0;
   overflow: auto;
   padding: 20px;
   background: #eef3f9 url("/assets/office_back.png") center / cover no-repeat;
   position: relative;
+}
+
+body.chat-resizing,
+body.chat-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .msg-trail {
@@ -696,6 +781,14 @@ body {
   z-index: 100;
   filter: drop-shadow(0 2px 8px rgba(240, 162, 33, 0.5))
           drop-shadow(0 0 12px rgba(241, 200, 76, 0.35));
+}
+
+.agent-output-bubble {
+  position: absolute;
+  pointer-events: none;
+  z-index: 101;
+  opacity: 0;
+  filter: drop-shadow(0 6px 12px rgba(15, 23, 42, 0.18));
 }
 
 #agents-grid {
@@ -1186,10 +1279,26 @@ body {
 
 #chat-header {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 10px;
   flex: 1;
   height: 100%;
+  min-width: 0;
+}
+
+.chat-header-content {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.chat-header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -1211,13 +1320,78 @@ body {
 }
 
 #chat-header-name {
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 600;
   color: #111827;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chat-header-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #4b5563;
+  background: #f9fafb;
+  flex-shrink: 0;
+}
+
+.chat-header-badge.view-only {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+#chat-header-loading {
+  width: 36px;
+  height: 36px;
+  display: block;
+  flex-shrink: 0;
+  animation: avatar-rotate 1.1s linear infinite;
+}
+
+.chat-header-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.chat-header-tab {
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.chat-header-tab:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.chat-header-tab.active {
+  border-color: #60a5fa;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.chat-header-tab.view-only {
+  background: #f8fafc;
 }
 
 .floating-chat-actions {
@@ -1266,8 +1440,8 @@ body {
   border-radius: 8px;
   font-size: 13px;
   line-height: 1.45;
-  white-space: pre-wrap;
-  word-wrap: break-word;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .msg.user {
@@ -1297,6 +1471,98 @@ body {
   font-style: italic;
 }
 
+.msg-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg-content > * {
+  margin: 0;
+}
+
+.msg-content h1,
+.msg-content h2,
+.msg-content h3,
+.msg-content h4,
+.msg-content h5,
+.msg-content h6 {
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.msg-content h1 { font-size: 1.35em; }
+.msg-content h2 { font-size: 1.25em; }
+.msg-content h3 { font-size: 1.15em; }
+.msg-content h4,
+.msg-content h5,
+.msg-content h6 { font-size: 1.05em; }
+
+.msg-content ul,
+.msg-content ol {
+  padding-left: 20px;
+}
+
+.msg-content li + li {
+  margin-top: 4px;
+}
+
+.msg-content a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.msg.user .msg-content a,
+.msg.error .msg-content a {
+  color: inherit;
+}
+
+.msg-content code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+}
+
+.msg-content pre {
+  overflow-x: auto;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #111827;
+  color: #f9fafb;
+}
+
+.msg-content pre code {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.msg-content blockquote {
+  padding-left: 10px;
+  border-left: 3px solid rgba(148, 163, 184, 0.7);
+  color: #475569;
+}
+
+.msg-content hr {
+  border: 0;
+  border-top: 1px solid #d1d5db;
+}
+
+.msg-content img,
+.msg-image {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: #f8fafc;
+  object-fit: contain;
+}
+
 .msg-files {
   margin-top: 6px;
   display: flex;
@@ -1312,6 +1578,20 @@ body {
 
 .msg-file:hover {
   text-decoration: underline;
+}
+
+.msg-image-link {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+.msg-image-caption {
+  font-size: 12px;
+  color: #4b5563;
 }
 
 #input-bar {
@@ -1353,23 +1633,30 @@ body {
 
 #chat-input-row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
 }
 
-#chat-input-row input {
+#chat-input-row textarea {
   flex: 1;
   padding: 9px 12px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
   font-size: 13px;
+  font-family: inherit;
   outline: none;
+  resize: none;
+  overflow-y: auto;
+  min-height: 38px;
+  max-height: 150px;
+  line-height: 1.4;
 }
 
-#chat-input-row input:focus { border-color: #89b4fa; }
+#chat-input-row textarea:focus { border-color: #89b4fa; }
 
 #chat-input-row button {
   margin-left: 8px;
-  padding: 9px 14px;
+  padding: 0 14px;
+  height: 38px;
   background: #89b4fa;
   color: #1e1e2e;
   border: none;
@@ -1383,11 +1670,10 @@ body {
 #chat-input-row button:disabled { opacity: 0.5; cursor: default; }
 
 #chat-file-btn {
-  width: 36px;
-  min-width: 36px;
+  width: 38px;
+  min-width: 38px;
   padding: 0;
   font-size: 18px;
-  line-height: 1;
 }
 
 #chat-empty {
@@ -1570,9 +1856,13 @@ body {
     width: 100%;
     max-width: none;
     min-width: 0;
+    flex-basis: auto;
     max-height: 45vh;
-    border-right: none;
     border-bottom: 1px solid #e5e7eb;
+  }
+
+  #team-chat-resizer {
+    display: none;
   }
 }
 </style>
@@ -1631,14 +1921,19 @@ body {
           </div>
           <div id="chat-empty" style="display:flex">Select an agent to start chatting</div>
           <div id="messages"></div>
-          <div id="input-bar">
+          <div id="input-bar" style="display:none">
             <div id="chat-file-pending"></div>
             <div id="chat-input-row">
-              <button id="chat-file-btn" type="button" title="Attach files" data-i18n-title="attach_file" disabled>+</button>
               <input id="chat-file-input" type="file" multiple style="display:none">
-              <input id="msg-input" type="text" placeholder="Type a message..." data-i18n-placeholder="type_message" disabled>
+              <textarea id="msg-input" rows="1" placeholder="Type a message..." data-i18n-placeholder="type_message" disabled></textarea>
+              <button id="chat-file-btn" type="button" title="Attach files" data-i18n-title="attach_file" disabled>+</button>
               <button id="send-btn" data-i18n="send" disabled>Send</button>
             </div>
+          </div>
+        </div>
+        <div id="team-chat-resizer" role="separator" aria-orientation="vertical" aria-label="Resize chat panel">
+          <div class="chat-resizer-handle" aria-hidden="true">
+            <span class="chat-resizer-arrow"></span>
           </div>
         </div>
         <div id="office-area">
@@ -1652,6 +1947,10 @@ body {
   <section id="agent-hub-view" class="view page">
     <div id="header-agent-hub" class="page-header" data-i18n="header_agent_hub">Agent Store</div>
     <div class="page-body">
+      <div class="page-note" data-i18n="agent_hub_activation_notice">
+        Agents on this page cannot be recognized by Alice (the main agent) until they are activated.
+        The main agent cannot call inactive agents from this page. Activate an agent first before using it.
+      </div>
       <div id="hub-grid"></div>
       <div id="hub-empty" class="empty-page" style="display:none">No templates available</div>
     </div>
@@ -1697,6 +1996,18 @@ body {
               <label for="cfg-provider-model">Model</label>
               <input id="cfg-provider-model" type="text">
             </div>
+            <div class="config-field">
+              <label for="cfg-provider-reasoning-effort">Reasoning Effort</label>
+              <select id="cfg-provider-reasoning-effort">
+                <option value="">Default / unset</option>
+                <option value="none">none</option>
+                <option value="minimal">minimal</option>
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+                <option value="xhigh">xhigh</option>
+              </select>
+            </div>
           </fieldset>
 
           <fieldset class="config-card">
@@ -1740,6 +2051,10 @@ body {
             <div class="config-field config-checkbox">
               <input id="cfg-daemon-verbose-chat" type="checkbox">
               <label for="cfg-daemon-verbose-chat">Verbose chat mode (show routed/internal details)</label>
+            </div>
+            <div class="config-field config-checkbox">
+              <input id="cfg-daemon-web-in-docker" type="checkbox">
+              <label for="cfg-daemon-web-in-docker">Web in Docker mode (bind 0.0.0.0, trust Docker bridge peer)</label>
             </div>
           </fieldset>
 
@@ -1835,6 +2150,11 @@ body {
   <section id="skills-view" class="view page">
     <div id="header-skills" class="page-header" data-i18n="header_skills">Skills Store</div>
     <div class="page-body">
+      <div class="page-note" data-i18n="skills_store_assignment_notice">
+        Some skills in this page are stored in the local skill hub. They cannot be used directly
+        until they are assigned to a specific agent. To configure one, first create or choose an
+        agent in My Lab, then ask Alice to add the selected skill to that agent.
+      </div>
       <div class="skills-layout">
         <div class="skills-header">
           <div class="skills-header-left">
@@ -1937,6 +2257,12 @@ body {
   const ROUTE_STATISTICS = "#/statistics";
   const ROUTE_AGENTS_PREFIX = "#/agents/";
   const WEBUI_LANGUAGE_STORAGE_KEY = "drclaw-web-lang-v1";
+  const OFFICE_SCROLL_STORAGE_KEY = "drclaw-web-office-scroll-v1";
+  const CHAT_PANEL_WIDTH_STORAGE_KEY = "drclaw-web-chat-panel-width-v1";
+  const CHAT_PANEL_DEFAULT_WIDTH = 400;
+  const CHAT_PANEL_MIN_WIDTH = 400;
+  const CHAT_PANEL_MIN_OFFICE_WIDTH = 120;
+  const MOBILE_LAYOUT_BREAKPOINT = 900;
 
   const agentsGrid = document.getElementById("agents-grid");
   const agentsEmpty = document.getElementById("agents-empty");
@@ -1951,7 +2277,10 @@ body {
   const langSwitchZh = document.getElementById("lang-switch-zh");
   const langSwitchEn = document.getElementById("lang-switch-en");
 
+  const teamWorkspace = document.getElementById("team-workspace");
   const teamChatPanel = document.getElementById("team-chat-panel");
+  const teamChatResizer = document.getElementById("team-chat-resizer");
+  const officeArea = document.getElementById("office-area");
   const floatingChatPublishBtn = document.getElementById("floating-chat-publish");
   const chatHeader = document.getElementById("chat-header");
   const messagesEl = document.getElementById("messages");
@@ -1970,6 +2299,7 @@ body {
   const cfgProviderApiKey = document.getElementById("cfg-provider-api-key");
   const cfgProviderApiBase = document.getElementById("cfg-provider-api-base");
   const cfgProviderModel = document.getElementById("cfg-provider-model");
+  const cfgProviderReasoningEffort = document.getElementById("cfg-provider-reasoning-effort");
   const cfgAgentMaxIterations = document.getElementById("cfg-agent-max-iterations");
   const cfgAgentMaxTokens = document.getElementById("cfg-agent-max-tokens");
   const cfgAgentTemperature = document.getElementById("cfg-agent-temperature");
@@ -1979,6 +2309,7 @@ body {
   const cfgDaemonFrontends = document.getElementById("cfg-daemon-frontends");
   const cfgDaemonShowToolCalls = document.getElementById("cfg-daemon-show-tool-calls");
   const cfgDaemonVerboseChat = document.getElementById("cfg-daemon-verbose-chat");
+  const cfgDaemonWebInDocker = document.getElementById("cfg-daemon-web-in-docker");
   const cfgTrayControlPanelUrl = document.getElementById("cfg-tray-control-panel-url");
   const cfgTrayIconPath = document.getElementById("cfg-tray-icon-path");
   const cfgTrayDaemonProgram = document.getElementById("cfg-tray-daemon-program");
@@ -2061,6 +2392,10 @@ body {
   let monitorWsState = "disconnected";
   let monitorRecentEventCount = 0;
   let currentLanguage = loadWebUiLanguage();
+  let pendingOfficeScrollRestore = loadOfficeScrollState();
+  let officeScrollRestoreAttempts = 0;
+  let chatPanelWidth = loadChatPanelWidth();
+  let chatResizeSession = null;
   let publishInFlight = false;
   const ASSET_CACHE_BUST = String(Date.now());
 
@@ -2073,8 +2408,10 @@ body {
       nav_config: "Config",
       header_my_team: "My Lab",
       header_agent_hub: "Agent Store",
+      agent_hub_activation_notice: "Agents on this page cannot be recognized by Alice (the main agent) until they are activated. The main agent cannot call inactive agents from this page. Activate an agent first before using it.",
       header_config: "Config",
       header_skills: "Skills Store",
+      skills_store_assignment_notice: "Some skills on this page are stored in the local skill hub. To use them, first create or choose an agent in My Lab, then ask Alice to add the selected skill to that agent.",
       header_statistics: "Statistics",
       statistics_agent: "Agent",
       statistics_consumption: "Consumption",
@@ -2090,6 +2427,8 @@ body {
       hub_section_not_activated: "Not activated",
       reload: "Reload",
       save: "Save",
+      config_saved: "Config saved.",
+      config_saved_restart_required: "Config saved. Restart daemon to apply the new configuration.",
       upload_skill: "Upload Skill (.zip)",
       publish: "Publish",
       publish_to_hub: "Publish to Agent Store",
@@ -2111,6 +2450,9 @@ body {
       attach_file: "Attach files",
       open_chat: "Open Chat",
       type_message: "Type a message...",
+      project_manager_tab: "Manager",
+      student_view_only: "View only",
+      student_view_only_placeholder: "This student is managed by the project manager. Send work from the Manager tab.",
       monitor_agents: "Agents",
       monitor_links: "Links",
       monitor_events: "Events",
@@ -2128,8 +2470,10 @@ body {
       nav_config: "配置",
       header_my_team: "我的实验室",
       header_agent_hub: "智能体商店",
+      agent_hub_activation_notice: "此页面中的智能体在激活前无法被虾秘（主智能体）识别。虾秘无法直接调用此页面中未激活的智能体。如需使用某个智能体，请务必先激活。",
       header_config: "配置",
       header_skills: "技能商店",
+      skills_store_assignment_notice: "此页面中的部分技能存储在本地技能库中，不能直接使用。配置方法：先在“我的实验室”中创建或选中一个智能体，再让虾秘把所选技能添加到该智能体，然后由该智能体使用。",
       header_statistics: "用量统计",
       statistics_agent: "智能体",
       statistics_consumption: "消耗",
@@ -2145,6 +2489,8 @@ body {
       hub_section_not_activated: "未激活",
       reload: "重新加载",
       save: "保存",
+      config_saved: "配置已保存。",
+      config_saved_restart_required: "配置已保存。请重启 daemon 以应用新配置。",
       upload_skill: "上传技能 (.zip)",
       publish: "发布",
       publish_to_hub: "发布到智能体商店",
@@ -2166,6 +2512,9 @@ body {
       attach_file: "附加文件",
       open_chat: "打开聊天",
       type_message: "输入消息...",
+      project_manager_tab: "管理",
+      student_view_only: "只读",
+      student_view_only_placeholder: "该 student 由项目 manager 管理，请在“管理”标签发送任务。",
       monitor_agents: "智能体",
       monitor_links: "连线",
       monitor_events: "事件",
@@ -2206,6 +2555,171 @@ body {
     return I18N.en[key] || key;
   }
 
+  function loadOfficeScrollState() {
+    try {
+      const raw = sessionStorage.getItem(OFFICE_SCROLL_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      const top = Number(parsed && parsed.top);
+      const left = Number(parsed && parsed.left);
+      return {
+        top: Number.isFinite(top) ? Math.max(0, top) : 0,
+        left: Number.isFinite(left) ? Math.max(0, left) : 0,
+      };
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  function loadChatPanelWidth() {
+    try {
+      const raw = localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  function saveChatPanelWidth(width) {
+    if (!Number.isFinite(width) || width <= 0) return;
+    try {
+      localStorage.setItem(CHAT_PANEL_WIDTH_STORAGE_KEY, String(Math.round(width)));
+    } catch (_err) {
+      // Ignore persistence errors.
+    }
+  }
+
+  function isDesktopTeamLayout() {
+    return window.innerWidth > MOBILE_LAYOUT_BREAKPOINT;
+  }
+
+  function getChatPanelWidthLimits() {
+    const workspaceWidth = teamWorkspace ? teamWorkspace.clientWidth : 0;
+    const resizerWidth = (teamChatResizer && isDesktopTeamLayout()) ? teamChatResizer.offsetWidth : 0;
+    const availableMax = Math.max(0, workspaceWidth - resizerWidth - CHAT_PANEL_MIN_OFFICE_WIDTH);
+    const min = Math.min(CHAT_PANEL_MIN_WIDTH, availableMax);
+    const max = Math.max(min, availableMax);
+    return { min, max };
+  }
+
+  function onChatResizeMove(event) {
+    if (!chatResizeSession || event.pointerId !== chatResizeSession.pointerId) return;
+    const delta = event.clientX - chatResizeSession.startX;
+    syncChatPanelWidth({
+      persist: false,
+      width: chatResizeSession.startWidth + delta,
+    });
+  }
+
+  function stopChatResize(eventOrPointerId) {
+    if (!chatResizeSession) return;
+    const pointerId = typeof eventOrPointerId === "number"
+      ? eventOrPointerId
+      : (eventOrPointerId && typeof eventOrPointerId.pointerId === "number"
+        ? eventOrPointerId.pointerId
+        : null);
+    if (pointerId != null && pointerId !== chatResizeSession.pointerId) return;
+    window.removeEventListener("pointermove", onChatResizeMove);
+    window.removeEventListener("pointerup", stopChatResize);
+    window.removeEventListener("pointercancel", stopChatResize);
+    document.body.classList.remove("chat-resizing");
+    if (teamChatResizer) {
+      teamChatResizer.classList.remove("active");
+      if (chatResizeSession.pointerId != null && typeof teamChatResizer.releasePointerCapture === "function") {
+        try {
+          teamChatResizer.releasePointerCapture(chatResizeSession.pointerId);
+        } catch (_err) {
+          // Ignore lost pointer capture.
+        }
+      }
+    }
+    saveChatPanelWidth(chatPanelWidth);
+    chatResizeSession = null;
+  }
+
+  function syncChatPanelWidth(options) {
+    if (!teamChatPanel) return;
+    if (!isDesktopTeamLayout()) {
+      stopChatResize();
+      teamChatPanel.style.width = "";
+      teamChatPanel.style.flexBasis = "";
+      return;
+    }
+    if (!teamWorkspace || teamWorkspace.clientWidth <= 0) return;
+
+    const preferredWidth = options && Number.isFinite(options.width)
+      ? options.width
+      : (Number.isFinite(chatPanelWidth) ? chatPanelWidth : CHAT_PANEL_DEFAULT_WIDTH);
+    const limits = getChatPanelWidthLimits();
+    const nextWidth = clamp(preferredWidth, limits.min, limits.max);
+    teamChatPanel.style.width = Math.round(nextWidth) + "px";
+    teamChatPanel.style.flexBasis = Math.round(nextWidth) + "px";
+    chatPanelWidth = nextWidth;
+    if (!options || options.persist !== false) {
+      saveChatPanelWidth(nextWidth);
+    }
+  }
+
+  function beginChatResize(event) {
+    if (!teamChatPanel || !teamWorkspace || !teamChatResizer || !isDesktopTeamLayout()) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    stopChatResize();
+    chatResizeSession = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: teamChatPanel.getBoundingClientRect().width,
+    };
+    if (typeof teamChatResizer.setPointerCapture === "function") {
+      try {
+        teamChatResizer.setPointerCapture(event.pointerId);
+      } catch (_err) {
+        // Ignore pointer capture failures.
+      }
+    }
+    document.body.classList.add("chat-resizing");
+    teamChatResizer.classList.add("active");
+    window.addEventListener("pointermove", onChatResizeMove);
+    window.addEventListener("pointerup", stopChatResize);
+    window.addEventListener("pointercancel", stopChatResize);
+    event.preventDefault();
+  }
+
+  function saveOfficeScrollState() {
+    if (!officeArea) return;
+    try {
+      sessionStorage.setItem(OFFICE_SCROLL_STORAGE_KEY, JSON.stringify({
+        top: officeArea.scrollTop,
+        left: officeArea.scrollLeft,
+      }));
+    } catch (_err) {
+      // Ignore persistence errors.
+    }
+  }
+
+  function restoreOfficeScrollIfNeeded() {
+    if (!officeArea || !pendingOfficeScrollRestore) return;
+    const route = normalizeHash(window.location.hash);
+    if (route !== ROUTE_AGENTS && !route.startsWith(ROUTE_AGENTS_PREFIX)) return;
+
+    const target = pendingOfficeScrollRestore;
+    window.requestAnimationFrame(function() {
+      window.requestAnimationFrame(function() {
+        if (!officeArea || !pendingOfficeScrollRestore) return;
+        officeArea.scrollTop = target.top;
+        officeArea.scrollLeft = target.left;
+        officeScrollRestoreAttempts += 1;
+
+        const topRestored = Math.abs(officeArea.scrollTop - target.top) < 2;
+        const leftRestored = Math.abs(officeArea.scrollLeft - target.left) < 2;
+        if ((topRestored && leftRestored) || officeScrollRestoreAttempts >= 4) {
+          pendingOfficeScrollRestore = null;
+        }
+      });
+    });
+  }
+
   function apiUrl(path) {
     const sep = path.indexOf("?") === -1 ? "?" : "&";
     return path + sep + "lang=" + encodeURIComponent(currentLanguage);
@@ -2224,6 +2738,44 @@ body {
   function agentDisplayName(agent) {
     if (!agent || typeof agent !== "object") return "";
     return String(agent.display_name || agent.name || agent.label || agent.id || "");
+  }
+
+  function projectIdForAgent(agent) {
+    if (!agent || typeof agent !== "object") return null;
+    const explicit = typeof agent.project_id === "string" ? agent.project_id.trim() : "";
+    if (explicit) return explicit;
+    const id = typeof agent.id === "string" ? agent.id.trim() : "";
+    if (id.startsWith("proj:")) return id.slice(5) || null;
+    if (id.startsWith("student:")) {
+      const parts = id.split(":");
+      return parts.length >= 3 && parts[1] ? parts[1] : null;
+    }
+    return null;
+  }
+
+  function buildProjectTabs(agentId) {
+    const current = getAgentById(agentId);
+    const projectId = projectIdForAgent(current);
+    if (!projectId) return [];
+    const projectAgents = agents.filter(function(agent) {
+      return projectIdForAgent(agent) === projectId
+        && (agent.type === "project_manager" || agent.type === "project_student");
+    });
+    const hasStudent = projectAgents.some(function(agent) {
+      return agent.type === "project_student";
+    });
+    if (!hasStudent) return [];
+    projectAgents.sort(function(a, b) {
+      if (a.type === "project_manager" && b.type !== "project_manager") return -1;
+      if (b.type === "project_manager" && a.type !== "project_manager") return 1;
+      return agentDisplayName(a).localeCompare(agentDisplayName(b));
+    });
+    return projectAgents;
+  }
+
+  function projectManagerForAgent(agentId) {
+    const tabs = buildProjectTabs(agentId);
+    return tabs.find(function(agent) { return agent.type === "project_manager"; }) || null;
   }
 
   function applyLanguage(lang) {
@@ -2288,6 +2840,242 @@ body {
     const d = document.createElement("div");
     d.textContent = String(s == null ? "" : s);
     return d.innerHTML;
+  }
+
+  function sanitizeMarkdownUrl(rawUrl, kind) {
+    if (typeof rawUrl !== "string") return null;
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return null;
+    if (
+      kind === "image"
+      && /^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\s]+$/i.test(trimmed)
+    ) {
+      return trimmed.replace(/\s+/g, "");
+    }
+    try {
+      const resolved = new URL(trimmed, window.location.href);
+      const protocol = resolved.protocol.toLowerCase();
+      if (protocol === "http:" || protocol === "https:") {
+        return resolved.href;
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
+  function isImageFileDescriptor(file) {
+    if (!file || typeof file !== "object") return false;
+    const mime = typeof file.mime === "string" ? file.mime.toLowerCase() : "";
+    if (mime.startsWith("image/")) return true;
+    const name = typeof file.name === "string" ? file.name.toLowerCase() : "";
+    return /\.(apng|avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(name);
+  }
+
+  function findNextMarkdownToken(text, start) {
+    const patterns = [
+      { type: "image", regex: /!\[([^\]]*)\]\(([^)]+)\)/g },
+      { type: "link", regex: /\[([^\]]+)\]\(([^)]+)\)/g },
+      { type: "code", regex: /`([^`\n]+)`/g },
+      { type: "strong", regex: /\*\*([^*]+)\*\*/g },
+      { type: "em", regex: /\*([^*\n]+)\*/g },
+    ];
+    let best = null;
+    for (const pattern of patterns) {
+      pattern.regex.lastIndex = start;
+      const match = pattern.regex.exec(text);
+      if (!match) continue;
+      if (
+        !best
+        || match.index < best.match.index
+        || (match.index === best.match.index && match[0].length > best.match[0].length)
+      ) {
+        best = { type: pattern.type, match };
+      }
+    }
+    return best;
+  }
+
+  function appendInlineMarkdown(parent, text) {
+    let cursor = 0;
+    const source = String(text == null ? "" : text);
+    while (cursor < source.length) {
+      const token = findNextMarkdownToken(source, cursor);
+      if (!token) {
+        parent.appendChild(document.createTextNode(source.slice(cursor)));
+        break;
+      }
+      if (token.match.index > cursor) {
+        parent.appendChild(document.createTextNode(source.slice(cursor, token.match.index)));
+      }
+      const raw = token.match[0];
+      if (token.type === "image") {
+        const url = sanitizeMarkdownUrl(token.match[2], "image");
+        if (url) {
+          const img = document.createElement("img");
+          img.src = url;
+          img.alt = token.match[1] || "";
+          img.loading = "lazy";
+          img.decoding = "async";
+          parent.appendChild(img);
+        } else {
+          parent.appendChild(document.createTextNode(raw));
+        }
+      } else if (token.type === "link") {
+        const url = sanitizeMarkdownUrl(token.match[2], "link");
+        if (url) {
+          const link = document.createElement("a");
+          link.href = url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          appendInlineMarkdown(link, token.match[1]);
+          parent.appendChild(link);
+        } else {
+          parent.appendChild(document.createTextNode(raw));
+        }
+      } else if (token.type === "code") {
+        const code = document.createElement("code");
+        code.textContent = token.match[1];
+        parent.appendChild(code);
+      } else if (token.type === "strong") {
+        const strong = document.createElement("strong");
+        appendInlineMarkdown(strong, token.match[1]);
+        parent.appendChild(strong);
+      } else if (token.type === "em") {
+        const em = document.createElement("em");
+        appendInlineMarkdown(em, token.match[1]);
+        parent.appendChild(em);
+      } else {
+        parent.appendChild(document.createTextNode(raw));
+      }
+      cursor = token.match.index + raw.length;
+    }
+  }
+
+  function appendInlineMarkdownWithBreaks(parent, text) {
+    const lines = String(text == null ? "" : text).split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      appendInlineMarkdown(parent, lines[i]);
+      if (i < lines.length - 1) {
+        parent.appendChild(document.createElement("br"));
+      }
+    }
+  }
+
+  function isMarkdownBlockStart(line) {
+    return (
+      /^\s*```/.test(line)
+      || /^#{1,6}\s+/.test(line)
+      || /^\s*>\s?/.test(line)
+      || /^\s*[-+*]\s+/.test(line)
+      || /^\s*\d+\.\s+/.test(line)
+      || /^\s*([-*_])(?:\s*\1){2,}\s*$/.test(line)
+    );
+  }
+
+  function buildMarkdownFragment(text) {
+    const fragment = document.createDocumentFragment();
+    const lines = String(text == null ? "" : text).replace(/\r\n?/g, "\n").split("\n");
+    let index = 0;
+
+    while (index < lines.length) {
+      const line = lines[index];
+      if (!line.trim()) {
+        index += 1;
+        continue;
+      }
+
+      const fence = line.match(/^\s*```([a-zA-Z0-9_-]+)?\s*$/);
+      if (fence) {
+        index += 1;
+        const codeLines = [];
+        while (index < lines.length && !/^\s*```\s*$/.test(lines[index])) {
+          codeLines.push(lines[index]);
+          index += 1;
+        }
+        if (index < lines.length) index += 1;
+        const pre = document.createElement("pre");
+        const code = document.createElement("code");
+        if (fence[1]) code.className = "language-" + fence[1].toLowerCase();
+        code.textContent = codeLines.join("\n");
+        pre.appendChild(code);
+        fragment.appendChild(pre);
+        continue;
+      }
+
+      const heading = line.match(/^(#{1,6})\s+(.*)$/);
+      if (heading) {
+        const level = Math.min(heading[1].length, 6);
+        const el = document.createElement("h" + level);
+        appendInlineMarkdownWithBreaks(el, heading[2]);
+        fragment.appendChild(el);
+        index += 1;
+        continue;
+      }
+
+      if (/^\s*([-*_])(?:\s*\1){2,}\s*$/.test(line)) {
+        fragment.appendChild(document.createElement("hr"));
+        index += 1;
+        continue;
+      }
+
+      if (/^\s*>\s?/.test(line)) {
+        const quoteLines = [];
+        while (index < lines.length && /^\s*>\s?/.test(lines[index])) {
+          quoteLines.push(lines[index].replace(/^\s*>\s?/, ""));
+          index += 1;
+        }
+        const blockquote = document.createElement("blockquote");
+        const inner = buildMarkdownFragment(quoteLines.join("\n"));
+        if (!inner.childNodes.length) {
+          appendInlineMarkdownWithBreaks(blockquote, quoteLines.join("\n"));
+        } else {
+          blockquote.appendChild(inner);
+        }
+        fragment.appendChild(blockquote);
+        continue;
+      }
+
+      const unordered = line.match(/^\s*[-+*]\s+(.*)$/);
+      const ordered = line.match(/^\s*\d+\.\s+(.*)$/);
+      if (unordered || ordered) {
+        const list = document.createElement(ordered ? "ol" : "ul");
+        const matcher = ordered ? /^\s*\d+\.\s+(.*)$/ : /^\s*[-+*]\s+(.*)$/;
+        while (index < lines.length) {
+          const itemMatch = lines[index].match(matcher);
+          if (!itemMatch) break;
+          const li = document.createElement("li");
+          appendInlineMarkdownWithBreaks(li, itemMatch[1]);
+          list.appendChild(li);
+          index += 1;
+        }
+        fragment.appendChild(list);
+        continue;
+      }
+
+      const paragraphLines = [];
+      while (
+        index < lines.length
+        && lines[index].trim()
+        && !isMarkdownBlockStart(lines[index])
+      ) {
+        paragraphLines.push(lines[index]);
+        index += 1;
+      }
+      const p = document.createElement("p");
+      appendInlineMarkdownWithBreaks(p, paragraphLines.join("\n"));
+      fragment.appendChild(p);
+    }
+
+    return fragment;
+  }
+
+  function renderMarkdownContent(container, text) {
+    if (!container) return;
+    const fragment = buildMarkdownFragment(text);
+    if (fragment.childNodes.length) {
+      container.appendChild(fragment);
+    }
   }
 
   function formatFileSize(bytes) {
@@ -2403,7 +3191,8 @@ body {
   }
 
   function populateConfigForm(config) {
-    const provider = config.provider || {};
+    const providers = config.providers || {};
+    const provider = providers[config.active_provider || "default"] || {};
     const agent = config.agent || {};
     const daemon = config.daemon || {};
     const tray = config.tray || {};
@@ -2414,6 +3203,7 @@ body {
     cfgProviderApiKey.value = provider.api_key || "";
     cfgProviderApiBase.value = provider.api_base || "";
     cfgProviderModel.value = provider.model || "";
+    cfgProviderReasoningEffort.value = provider.reasoning_effort || "";
 
     cfgAgentMaxIterations.value = agent.max_iterations == null ? "" : String(agent.max_iterations);
     cfgAgentMaxTokens.value = agent.max_tokens == null ? "" : String(agent.max_tokens);
@@ -2425,6 +3215,7 @@ body {
     cfgDaemonFrontends.value = formatCsvList(daemon.frontends);
     cfgDaemonShowToolCalls.checked = daemon.show_tool_calls !== false;
     cfgDaemonVerboseChat.checked = daemon.verbose_chat !== false;
+    cfgDaemonWebInDocker.checked = daemon.web_in_docker === true;
 
     cfgTrayControlPanelUrl.value = tray.control_panel_url || "";
     cfgTrayIconPath.value = tray.icon_path || "";
@@ -2457,12 +3248,18 @@ body {
       throw new Error("Config is not loaded yet.");
     }
 
+    const activeProvider = configData.active_provider || "default";
     const payload = {
-      provider: {
-        api_key: cfgProviderApiKey.value,
-        api_base: cfgProviderApiBase.value.trim() || null,
-        model: cfgProviderModel.value,
+      providers: {
+        ...(configData.providers || {}),
+        [activeProvider]: {
+          api_key: cfgProviderApiKey.value,
+          api_base: cfgProviderApiBase.value.trim() || null,
+          model: cfgProviderModel.value,
+          reasoning_effort: cfgProviderReasoningEffort.value || null,
+        },
       },
+      active_provider: activeProvider,
       agent: {
         max_iterations: parseRequiredInt(cfgAgentMaxIterations.value, "Agent max iterations"),
         max_tokens: parseRequiredInt(cfgAgentMaxTokens.value, "Agent max tokens"),
@@ -2475,6 +3272,7 @@ body {
         frontends: parseCsvList(cfgDaemonFrontends.value),
         verbose_chat: Boolean(cfgDaemonVerboseChat.checked),
         show_tool_calls: Boolean(cfgDaemonShowToolCalls.checked),
+        web_in_docker: Boolean(cfgDaemonWebInDocker.checked),
       },
       tray: {
         control_panel_url: cfgTrayControlPanelUrl.value,
@@ -2574,7 +3372,13 @@ body {
       }
       configData = response.config || payload;
       populateConfigForm(configData);
-      setConfigStatus("success", "Config saved. Restart daemon to apply all changes.");
+      if (response.restart_required) {
+        const message = t("config_saved_restart_required");
+        setConfigStatus("success", message);
+        alert(message);
+      } else {
+        setConfigStatus("success", t("config_saved"));
+      }
     } catch (e) {
       const message = e && e.message ? e.message : String(e);
       setConfigStatus("error", "Failed to save config: " + message);
@@ -3013,7 +3817,20 @@ body {
 
 
   function renderMonitor() {
+    const savedOfficeScroll = officeArea ? {
+      top: officeArea.scrollTop,
+      left: officeArea.scrollLeft,
+    } : null;
     const models = renderAgentsPage();
+    if (officeArea && savedOfficeScroll) {
+      officeArea.scrollTop = savedOfficeScroll.top;
+      officeArea.scrollLeft = savedOfficeScroll.left;
+      window.requestAnimationFrame(function() {
+        if (!officeArea) return;
+        officeArea.scrollTop = savedOfficeScroll.top;
+        officeArea.scrollLeft = savedOfficeScroll.left;
+      });
+    }
     if (monitorSummary) {
       const agentNodeCount = models.filter(function(m) { return m.kind === "agent"; }).length;
       monitorSummary.textContent =
@@ -3097,10 +3914,15 @@ body {
     ) {
       return withAssetCacheBust("/assets/avatars/8.png");
     }
-    if (agent.type === "student") return withAssetCacheBust("/assets/avatars/17.png");
+    if (agent.type === "project_manager") return withAssetCacheBust("/assets/avatars/17.png");
+    if (agent.type === "project_student") return withAssetCacheBust("/assets/avatars/19.png");
     if (agent.type === "equipment") return withAssetCacheBust("/assets/avatar_3.jpg");
     if (agent.type === "external") return withAssetCacheBust("/assets/avatars/1.png");
     return withAssetCacheBust("/assets/DrClaw.png");
+  }
+
+  function agentChatEnabled(agent) {
+    return !agent || agent.chat_enabled !== false;
   }
 
   function renderAgentsPage() {
@@ -3128,7 +3950,7 @@ body {
       card.dataset.id = model.id;
       const avatarSrc = sourceAgent ? avatarForAgent(sourceAgent) : avatarForAgent(model);
       const avatarFallback = (
-        sourceAgent && sourceAgent.type === "student"
+        sourceAgent && sourceAgent.type === "project_student"
           ? withAssetCacheBust("/assets/avatars/17.png")
           : sourceAgent && sourceAgent.avatar
           ? withAssetCacheBust("/assets/avatar_2.jpg")
@@ -3406,16 +4228,29 @@ body {
     if (status !== "working") {
       delete pendingByAgent[agentId];
     }
+    if (agentId === activeAgent) {
+      updateChatHeader();
+    }
     if (isAgentsViewActive()) {
       renderMonitor();
     }
   }
 
-  function pickActiveAgent(preferredId) {
-    if (preferredId && getAgentById(preferredId)) return preferredId;
-    if (activeAgent && getAgentById(activeAgent)) return activeAgent;
+  function pickActiveAgent(preferredId, options) {
+    const allowViewOnlyPreferred = Boolean(options && options.allowViewOnlyPreferred);
+    if (preferredId) {
+      const preferred = getAgentById(preferredId);
+      if (preferred && (allowViewOnlyPreferred || agentChatEnabled(preferred))) return preferredId;
+      const manager = projectManagerForAgent(preferredId);
+      if (manager) return manager.id;
+    }
+    if (activeAgent) {
+      const current = getAgentById(activeAgent);
+      if (current && agentChatEnabled(current)) return activeAgent;
+    }
     if (getAgentById("main")) return "main";
-    return agents.length ? agents[0].id : null;
+    const firstChatEnabled = agents.find(agentChatEnabled);
+    return firstChatEnabled ? firstChatEnabled.id : (agents.length ? agents[0].id : null);
   }
 
   function updateChatHeader() {
@@ -3429,8 +4264,10 @@ body {
     const avatarSrc = agent ? avatarForAgent(agent) : withAssetCacheBust("/assets/DrClaw.png");
     const avatarFallback = agent
       ? (
-        agent.type === "student"
+        agent.type === "project_manager"
           ? withAssetCacheBust("/assets/avatars/17.png")
+          : agent.type === "project_student"
+          ? withAssetCacheBust("/assets/avatars/19.png")
           : agent.type === "equipment"
           ? withAssetCacheBust("/assets/avatar_3.jpg")
           : agent.type === "external"
@@ -3438,6 +4275,8 @@ body {
           : withAssetCacheBust("/assets/avatars/8.png")
       )
       : withAssetCacheBust("/assets/DrClaw.png");
+    const isWorking = agent ? uiStatus(agent) === "working" : Boolean(pendingByAgent[activeAgent]);
+    const projectTabs = buildProjectTabs(activeAgent);
 
     chatHeader.innerHTML = "";
     const avatarWrap = document.createElement("div");
@@ -3451,12 +4290,55 @@ body {
     }, { once: true });
     avatarWrap.appendChild(avatar);
 
+    const contentWrap = document.createElement("div");
+    contentWrap.className = "chat-header-content";
+    const titleRow = document.createElement("div");
+    titleRow.className = "chat-header-title-row";
     const nameEl = document.createElement("div");
     nameEl.id = "chat-header-name";
     nameEl.textContent = displayName;
+    titleRow.appendChild(nameEl);
+
+    if (agent && agent.type === "project_student") {
+      const badge = document.createElement("span");
+      badge.className = "chat-header-badge view-only";
+      badge.textContent = t("student_view_only");
+      titleRow.appendChild(badge);
+    }
+
+    if (isWorking) {
+      const loadingEl = document.createElement("img");
+      loadingEl.id = "chat-header-loading";
+      loadingEl.src = withAssetCacheBust("/assets/loading.png");
+      loadingEl.alt = "";
+      loadingEl.setAttribute("aria-hidden", "true");
+      titleRow.appendChild(loadingEl);
+    }
+
+    contentWrap.appendChild(titleRow);
+
+    if (projectTabs.length > 1) {
+      const tabsEl = document.createElement("div");
+      tabsEl.className = "chat-header-tabs";
+      for (const tabAgent of projectTabs) {
+        const tab = document.createElement("button");
+        tab.type = "button";
+        tab.className = "chat-header-tab"
+          + (tabAgent.id === activeAgent ? " active" : "")
+          + (agentChatEnabled(tabAgent) ? "" : " view-only");
+        tab.textContent = tabAgent.type === "project_manager"
+          ? t("project_manager_tab")
+          : agentDisplayName(tabAgent);
+        tab.onclick = function() {
+          openChat(tabAgent.id);
+        };
+        tabsEl.appendChild(tab);
+      }
+      contentWrap.appendChild(tabsEl);
+    }
 
     chatHeader.appendChild(avatarWrap);
-    chatHeader.appendChild(nameEl);
+    chatHeader.appendChild(contentWrap);
     updatePublishButtonState();
   }
 
@@ -3712,8 +4594,11 @@ body {
       div.className = "msg " + m.role;
       if (m.text) {
         const textNode = document.createElement("div");
-        textNode.textContent = m.text;
-        div.appendChild(textNode);
+        textNode.className = "msg-content";
+        renderMarkdownContent(textNode, m.text);
+        if (textNode.childNodes.length) {
+          div.appendChild(textNode);
+        }
       }
       const files = Array.isArray(m.files) ? m.files : [];
       if (files.length) {
@@ -3721,13 +4606,38 @@ body {
         filesWrap.className = "msg-files";
         for (const file of files) {
           if (!file || typeof file.download_url !== "string") continue;
+          const label = file.name || "file";
+          const safeUrl = sanitizeMarkdownUrl(
+            file.download_url,
+            isImageFileDescriptor(file) ? "image" : "link"
+          );
+          if (!safeUrl) continue;
+          const sizeLabel = formatFileSize(file.size || 0);
+          if (isImageFileDescriptor(file)) {
+            const imageLink = document.createElement("a");
+            imageLink.className = "msg-image-link";
+            imageLink.href = safeUrl;
+            imageLink.target = "_blank";
+            imageLink.rel = "noopener noreferrer";
+            const image = document.createElement("img");
+            image.className = "msg-image";
+            image.src = safeUrl;
+            image.alt = label;
+            image.loading = "lazy";
+            image.decoding = "async";
+            const caption = document.createElement("span");
+            caption.className = "msg-image-caption";
+            caption.textContent = label + " (" + sizeLabel + ")";
+            imageLink.appendChild(image);
+            imageLink.appendChild(caption);
+            filesWrap.appendChild(imageLink);
+            continue;
+          }
           const link = document.createElement("a");
           link.className = "msg-file";
-          link.href = file.download_url;
+          link.href = safeUrl;
           link.target = "_blank";
-          link.rel = "noopener";
-          const label = file.name || "file";
-          const sizeLabel = formatFileSize(file.size || 0);
+          link.rel = "noopener noreferrer";
           link.textContent = "File: " + label + " (" + sizeLabel + ")";
           filesWrap.appendChild(link);
         }
@@ -3845,10 +4755,19 @@ body {
     chatEmpty.style.display = "none";
     messagesEl.style.display = "flex";
     inputBar.style.display = "flex";
-    msgInput.disabled = false;
-    sendBtn.disabled = false;
-    if (chatFileBtn) chatFileBtn.disabled = false;
     renderPendingFiles();
+    updateChatInputState();
+  }
+
+  function updateChatInputState() {
+    const agent = activeAgent ? getAgentById(activeAgent) : null;
+    const enabled = agentChatEnabled(agent);
+    msgInput.disabled = !enabled;
+    sendBtn.disabled = !enabled;
+    if (chatFileBtn) chatFileBtn.disabled = !enabled;
+    msgInput.placeholder = enabled
+      ? "Send a message..."
+      : t("student_view_only_placeholder");
   }
 
   function openChat(agentId) {
@@ -3864,7 +4783,7 @@ body {
   }
 
   function enterChat(agentId) {
-    activeAgent = pickActiveAgent(agentId);
+    activeAgent = pickActiveAgent(agentId, { allowViewOnlyPreferred: Boolean(agentId) });
     updateChatHeader();
 
     if (!activeAgent) {
@@ -3876,7 +4795,6 @@ body {
     showChat();
     renderMessages();
     void loadAgentHistory(activeAgent);
-    msgInput.focus();
   }
 
   function appendTo(agentId, msg) {
@@ -3891,6 +4809,9 @@ body {
     if (!agentId) return;
     if (pending) pendingByAgent[agentId] = true;
     else delete pendingByAgent[agentId];
+    if (agentId === activeAgent) {
+      updateChatHeader();
+    }
     if (isAgentsViewActive()) {
       renderMonitor();
     }
@@ -3923,6 +4844,7 @@ body {
       if (isAgentsViewActive()) {
         enterChat(activeAgent);
         renderMonitor();
+        restoreOfficeScrollIfNeeded();
       }
       if (views.statistics && views.statistics.classList.contains("active")) {
         loadStatistics(true).catch(function() {});
@@ -3959,10 +4881,13 @@ body {
 
   async function send() {
     if (!activeAgent) return;
+    const agent = getAgentById(activeAgent);
+    if (!agentChatEnabled(agent)) return;
     const text = msgInput.value.trim();
     const pendingFiles = getPendingFiles(activeAgent).slice();
     if (!text && !pendingFiles.length) return;
     msgInput.value = "";
+    msgInput.style.height = "auto";
     await sendTextToAgent(activeAgent, text, pendingFiles);
   }
 
@@ -3995,6 +4920,10 @@ body {
       setPending(agentId, true);
       if (!getAgentById(agentId)) {
         await fetchAgents();
+      }
+      const agent = getAgentById(agentId);
+      if (!agentChatEnabled(agent)) {
+        throw new Error("This student agent is view-only. Send work to the project manager.");
       }
       await ensureAgentActive(agentId);
 
@@ -4047,6 +4976,7 @@ body {
       const data = JSON.parse(ev.data);
       if (data.type === "chat") {
         recordMonitorEvent(data.type, data.source, data.topic);
+        fireAgentOutputBubble(data.source);
         appendTo(data.source, { role: "agent", text: data.text, files: data.files });
         setPending(data.source, false);
         debouncedFetchAgents();
@@ -4077,6 +5007,7 @@ body {
           });
           return;
         }
+        fireAgentOutputBubble(data.source);
         fireMessageTrail(data.source, data.topic);
         const fromLabel = agentLabel(data.source);
         const toLabel = agentLabel(data.topic);
@@ -4090,6 +5021,7 @@ body {
         }
       } else if (data.type === "tool_call") {
         recordMonitorEvent(data.type, data.source, data.topic);
+        fireAgentOutputBubble(data.source);
         appendTo(data.source, {
           role: "tool_call",
           text: data.text,
@@ -4097,6 +5029,9 @@ body {
         });
       } else if (data.type === "equipment_status" || data.type === "equipment_report") {
         recordMonitorEvent(data.type, data.source, data.topic);
+        if (isAgentLikeSource(data.source)) {
+          fireAgentOutputBubble(data.source);
+        }
         const line = "[" + data.type + "] " + data.text;
         appendTo(data.topic, { role: "routed", text: line });
         if (data.source !== data.topic) {
@@ -4106,11 +5041,13 @@ body {
         recordMonitorEvent(data.type, data.source, data.topic);
         const target = (data.source && getAgentById(data.source)) ? data.source : data.topic;
         if (target) {
+          fireAgentOutputBubble(target);
           appendTo(target, { role: "routed", text: "[" + data.type + "] " + data.text });
         }
       } else if (data.type === "error") {
         const errorAgentId = (data.source && getAgentById(data.source)) ? data.source : activeAgent;
         if (errorAgentId) {
+          fireAgentOutputBubble(errorAgentId);
           appendTo(errorAgentId, { role: "error", text: data.text });
           setPending(errorAgentId, false);
           setAgentStatus(errorAgentId, "error");
@@ -4126,6 +5063,53 @@ body {
   }
 
   const MSG_TRAIL_SVG = "data:image/svg+xml," + encodeURIComponent('<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M847.488 1008.896H61.504V117.056h491.968l294.016 229.952z" fill="#F0A221"/><path d="M956.48 901.888H170.496V10.048h556.032l230.016 226.176v665.664zM729.984 102.016v144h144l-144-144z m-104.96 81.984H286.016v57.984h339.008v-57.984z m216.96 164.992H284.992v57.984h556.992v-57.984z m0 169.984H284.992v57.984h556.992v-57.984z m0 165.056H284.992v57.984h556.992v-57.984z" fill="#F1C84C"/></svg>');
+
+  function randomInRange(min, max) {
+    return min + Math.random() * (max - min);
+  }
+
+  function fireAgentOutputBubble(agentId) {
+    if (!agentId || !isAgentsViewActive()) return;
+    var office = document.getElementById("office-area");
+    if (!office) return;
+    var card = office.querySelector('.desk-card[data-id="' + agentId + '"]');
+    if (!card) return;
+
+    var avatar = card.querySelector(".desk-avatar");
+    var officeRect = office.getBoundingClientRect();
+    var anchorRect = avatar ? avatar.getBoundingClientRect() : card.getBoundingClientRect();
+    var startX = anchorRect.left - officeRect.left + office.scrollLeft + randomInRange(-14, 40);
+    var startY = anchorRect.top - officeRect.top + office.scrollTop + randomInRange(-22, 8);
+    var driftX = randomInRange(-20, 20);
+    var riseY = randomInRange(36, 62);
+    var tilt = randomInRange(-12, 12);
+    var size = randomInRange(44.1, 60.9);
+
+    var bubble = document.createElement("img");
+    bubble.className = "agent-output-bubble";
+    bubble.src = withAssetCacheBust("/assets/bubble3.png");
+    bubble.alt = "";
+    bubble.setAttribute("aria-hidden", "true");
+    bubble.style.left = startX.toFixed(1) + "px";
+    bubble.style.top = startY.toFixed(1) + "px";
+    bubble.style.width = size.toFixed(1) + "px";
+    office.appendChild(bubble);
+
+    var anim = bubble.animate([
+      { transform: "translate(0px, 10px) scale(0.55) rotate(" + tilt.toFixed(1) + "deg)", opacity: 0 },
+      { transform: "translate(" + (driftX * 0.3).toFixed(1) + "px, -4px) scale(0.98) rotate(" + (tilt * 0.4).toFixed(1) + "deg)", opacity: 1, offset: 0.08 },
+      { transform: "translate(" + (driftX * 0.72).toFixed(1) + "px, -" + (riseY * 0.65).toFixed(1) + "px) scale(1.02) rotate(" + (tilt * 0.55).toFixed(1) + "deg)", opacity: 1, offset: 0.84 },
+      { transform: "translate(" + driftX.toFixed(1) + "px, -" + riseY.toFixed(1) + "px) scale(1.05) rotate(" + (tilt * 0.75).toFixed(1) + "deg)", opacity: 0 }
+    ], {
+      duration: 2650,
+      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      fill: "forwards",
+    });
+
+    anim.onfinish = function() {
+      bubble.remove();
+    };
+  }
 
   function fireMessageTrail(sourceId, targetId) {
     if (sourceId === targetId) return;
@@ -4177,10 +5161,10 @@ body {
     setActiveView(route.view);
 
     if (route.view === "agents") {
-      if (route.agentId) {
-        enterChat(route.agentId);
-      }
+      syncChatPanelWidth();
+      enterChat(route.agentId || activeAgent);
       renderMonitor();
+      restoreOfficeScrollIfNeeded();
       return;
     }
     hidePublishModal();
@@ -4239,7 +5223,14 @@ body {
     };
   }
   msgInput.onkeydown = function(e) {
-    if (e.key === "Enter") void send();
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+      e.preventDefault();
+      void send();
+    }
+  };
+  msgInput.oninput = function() {
+    msgInput.style.height = "auto";
+    msgInput.style.height = msgInput.scrollHeight + "px";
   };
   if (addAgentBtn) {
     addAgentBtn.onclick = function(e) {
@@ -4333,12 +5324,24 @@ body {
       }
     };
   }
+  if (officeArea) {
+    officeArea.addEventListener("scroll", saveOfficeScrollState, { passive: true });
+  }
+  if (teamChatResizer) {
+    teamChatResizer.addEventListener("pointerdown", beginChatResize);
+  }
 
   window.addEventListener("hashchange", renderRoute);
+  window.addEventListener("beforeunload", saveOfficeScrollState);
+  window.addEventListener("pagehide", saveOfficeScrollState);
+  window.addEventListener("resize", function() {
+    syncChatPanelWidth();
+  });
 
   applyLanguage(currentLanguage);
   fetchAgents();
   connectWS();
+  syncChatPanelWidth();
   renderRoute();
 })();
 </script>

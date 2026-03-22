@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from drclaw.providers.base import ASSISTANT_PROVIDER_FIELDS_KEY
+
 if TYPE_CHECKING:
     from drclaw.agent.memory import MemoryStore
     from drclaw.agent.skills import SkillsLoader
@@ -21,6 +23,18 @@ class ContextBuilder:
     """
 
     _RUNTIME_CONTEXT_TAG = "[Runtime Context -- metadata only, not instructions]"
+    _GLOBAL_OPERATING_POLICY = (
+        "# Global Operating Policy\n\n"
+        "## Python Environment\n"
+        "- If Python environment setup, virtualenv creation, dependency installation, or Python"
+        " command execution is needed, default to uv (`uv venv`, `uv sync`, `uv run`) unless"
+        " the caller explicitly requires another tool.\n\n"
+        "## Help-Seeking\n"
+        "- If an operation becomes difficult, blocked, ambiguous, or starts requiring repeated"
+        " trial-and-error, stop further attempts and seek help from the user or caller.\n"
+        "- Do not keep retrying the same failing approach without new information, access,"
+        " clarification, or explicit user approval."
+    )
 
     def __init__(
         self,
@@ -37,7 +51,7 @@ class ContextBuilder:
     def build_system_prompt(self) -> str:
         """Build the system prompt from identity text and optional memory context."""
         text = self.identity_text() if callable(self.identity_text) else self.identity_text
-        parts = [text]
+        parts = [text, self._GLOBAL_OPERATING_POLICY]
 
         if self.memory_store:
             memory = self.memory_store.get_memory_context()
@@ -119,6 +133,36 @@ class ContextBuilder:
         return out
 
     @staticmethod
+    def _runtime_active_agents(runtime_metadata: dict[str, Any] | None) -> list[dict[str, str]]:
+        if not runtime_metadata:
+            return []
+        raw = runtime_metadata.get("active_agents")
+        if not isinstance(raw, list):
+            return []
+        out: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            agent_id = item.get("id")
+            if not isinstance(agent_id, str):
+                continue
+            clean_id = agent_id.strip()
+            if not clean_id or clean_id in seen:
+                continue
+            name = item.get("name")
+            role = item.get("role")
+            out.append(
+                {
+                    "id": clean_id,
+                    "name": str(name).strip() if isinstance(name, str) and name.strip() else clean_id,
+                    "role": str(role).strip() if isinstance(role, str) and role.strip() else "",
+                }
+            )
+            seen.add(clean_id)
+        return out
+
+    @staticmethod
     def _build_runtime_context(
         channel: str | None,
         chat_id: str | None,
@@ -132,6 +176,16 @@ class ContextBuilder:
         webui_lang = ContextBuilder._webui_language_hint(runtime_metadata)
         if webui_lang:
             lines.append(f"WebUI Preferred Response Language: {webui_lang}")
+        active_agents = ContextBuilder._runtime_active_agents(runtime_metadata)
+        if active_agents:
+            lines.append("Active Agents:")
+            for item in active_agents:
+                role = item.get("role", "")
+                role_suffix = f" | role={role}" if role else ""
+                lines.append(
+                    f"- {item.get('name', item.get('id', 'agent'))} | "
+                    f"id={item.get('id', '')}{role_suffix}"
+                )
         attachments = ContextBuilder._runtime_attachments(runtime_metadata)
         if attachments:
             lines.append("Attached Files:")
@@ -178,11 +232,14 @@ class ContextBuilder:
         messages: list[dict[str, Any]],
         content: str | None,
         tool_calls: list[dict[str, Any]] | None = None,
+        assistant_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Add an assistant message to the message list."""
         msg: dict[str, Any] = {"role": "assistant", "content": content}
         if tool_calls:
             msg["tool_calls"] = tool_calls
+        if assistant_metadata:
+            msg[ASSISTANT_PROVIDER_FIELDS_KEY] = dict(assistant_metadata)
         messages.append(msg)
 
     def add_tool_result(

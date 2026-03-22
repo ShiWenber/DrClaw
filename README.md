@@ -3,7 +3,7 @@
 <img src="assets/banner1.png" width="80%" />
 
 
-# 龙虾博士 - InternClaw
+# 龙虾博士 - DrClaw
 
 <!-- badges -->
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
@@ -15,17 +15,25 @@
 
 > 虾做科研，不瞎做
 
-### 组建龙虾科研天团，帮你完成每周科研任务 
+### 你的7✖️24小时AI科研团队 -- 减少重复劳动，专注思考创造
 
-### 多学科科研智能体集成，一键启用，无需配置
+### 不能帮你拿到博士学位，但能让你轻松许多
 
 <figure>
-<img src="assets/UI3.png" alt="InternClaw UI" />
+<img src="assets/UI3.png" alt="DrClaw UI" />
 </figure>
 
 </div>
 
 [**中文**](./README.md) | [**English**](./README_en.md)
+
+文档入口：[用户手册](./docs/USER_MANUAL.md)
+
+微信群聊邀请二维码：
+
+<p align="center">
+<img src="assets/demos/wechat_group.png" alt="DrClaw 微信群聊邀请二维码" width="320" />
+</p>
 
 ## 开工大吉
 
@@ -39,10 +47,12 @@ bash <(curl -fsSL https://raw.githubusercontent.com/qzzqzzb/drclaw/main/install.
 
 ## 目录
 
-- [InternClaw是什么](#internclaw-你的全自动赛博科研流水线)
+- [DrClaw: 你的7✖️24科研团队](#drclaw-你的724科研团队)
 - [快速上手](#快速上手)
+- [使用案例](#使用案例)
 - [项目结构](#项目结构)
 - [特点](#特点)
+- [安全防护](#安全防护)
 - [配置](#配置)
 - [测试中功能](#测试中功能)
 - [使用](#使用)
@@ -51,54 +61,58 @@ bash <(curl -fsSL https://raw.githubusercontent.com/qzzqzzb/drclaw/main/install.
 - [附录](#附录)
 
 
-## InternClaw: 你的全自动赛博科研流水线
+## DrClaw: 你的7✖️24科研团队
 
-InternClaw是什么？
+DrClaw不能：
 
-这个问题的答案取决于你 -- 你在每周的科研中做什么，InternClaw就是什么。
+- ❌ 产生科研兴趣
+- ❌ 给你发博士录取通知书
+- ❌ 答辩
+- ❌ 授予你博士学位
+- ❌ 在院士评选中投票给你
 
-它可以把你一周的科研任务打包自动化：读论文、做实验、写代码、跑结果、画图、写报告。
 
-你唯一需要做的事情是：
 
-虾们，帮我搞清楚这个问题。
+DrClaw可以：
 
-然后看着一群 龙虾博士生 🦞 开始干活。
+- ✅ 让你专注于你真正感兴趣的科研，节省你花费在科研杂活上的时间
+- ✅ 在你收到录取通知书的时候告诉你
+- ✅ 帮你在答辩前整理成果，下载论文模版，提醒你格式有错误
+- ✅ 换个title称呼你
+- ✅ 有一定概率增大你参与评选的概率
 
-### 🦞 什么是龙虾博士生？
+还可以：
 
-| 真人类博士生 🧑‍🎓 | 龙虾博士生 🦞 |
+- ✅ 自动搜集、推送你可能感兴趣的最新论文，免去你一篇一篇翻阅的烦恼。
+- ✅ 编写、修改实验代码，并监控实验进度，完成式自动告知你结果如何。
+- ✅ 解决繁琐的文案工作 -- 在组会前没时间做ppt写报告？让DrClaw基于你的项目进展，自动生成。
+- ✅ 在科研压力山大时和虾摸玩个小游戏，放松一下科研效率更高。
+- ✅ 节省你的时间去思考更重要的事情，而不是在不得不做的琐事中迷失自己。
+
+
+DrClaw内置了10+个开箱即用的各式智能体，基于200+科研技能提供多维度的科研支持，让你在几分钟内就可以组建自己的科研支持团队，招贤纳虾：
+
+| 分类 | 智能体 |
 | :--- | :--- |
-| 会因为跑不出结果而深夜 emo | 遇到 Error 只会无情捕捉异常并重试 |
-| 会拖延，DDL 前一天才打开 Overleaf | 接到指令的第一秒，CPU 利用率直接拉满 |
-| 需要时间学习，理解，记忆 | 多学科预设，一秒精通所有学科知识，永不遗忘 |
-| **他们总有一天会毕业** | **龙虾永远不会毕业。** |
+| 通用科研 | 虾看论文 <img src="./assets/avatars/18.png" alt="虾看论文" height="36" />，脑洞虾，虾跑实验 <img src="./assets/avatars/3.png" alt="虾跑实验" height="36" /> |
+| 学科专用 | 虾顿 <img src="./assets/avatars/0.png" alt="虾顿" height="36" />（物理），拉瓦虾 <img src="./assets/avatars/1.png" alt="拉瓦虾" height="36" />（化学），高蛋白深海虾（蛋白组学），基因虾 <img src="./assets/avatars/4.png" alt="基因虾" height="36" />（基因组学），地科虾（地球科学），我不是药虾 <img src="./assets/avatars/5.png" alt="我不是药虾" height="36" />（药学）。。。。 |
+| 科研杂活 | 虾报告 <img src="./assets/avatars/6.png" alt="虾报告" height="36" />，虾写本子，虾做ppt，虾记录 |
+| 情感陪伴 | 虾摸，虾夸，虾猫 <img src="./assets/avatars/19.png" alt="虾猫" height="36" /> |
 
-龙虾博士生是一群不会毕业、不会拖延、不会摆烂的科研代理。
 
-每只龙虾都擅长不同科研技能/学科领域：
-
-📚 **虾看论文**/
-🧪 **虾跑实验**/
-📊 **虾做分析**/
-✍️ **虾写报告**
-
-以及10+个学科专用科研龙虾，集成200+学科深度科研技能库
-
-### 沉浸式PI角色扮演
-
-在这个系统里，作为PI的你只负责三件事：
-
-- 指点江山 PI > 调研一下最近三年关于 X 的方法
-
-- 下指令 PI > 做一个 baseline 实验
-
-- 骂龙虾 PI > 这个结果不对，重新跑
 
 ## 快速上手
 
-作为PI，你只需要对秘书说出你想做什么：
+### 你可以从智能体商店中一键导入预设智能体，迅速搭建自己的科研工作流：
 
+<p align="center">
+  <a href="https://youtu.be/aKUg_n3uw9k">
+    <img src="https://img.youtube.com/vi/aKUg_n3uw9k/hqdefault.jpg" alt="从智能体商店一键导入预设模版，迅速搭建科研工作流" height="384" />
+  </a>
+</p>
+
+
+<!--
 <table>
 <tr>
 <td width="33%"><img src="assets/demos/new_student.png" alt="招个新学生来干活"><br><em>招个新学生来干活</em></td>
@@ -106,7 +120,7 @@ InternClaw是什么？
 <td width="33%"><img src="assets/demos/paper_report.png" alt="让学生写个报告"><br><em>让学生写个报告</em></td>
 </tr>
 <tr>
-<td width="33%"><img src="assets/demos/paper_report.png" alt="让学生跑个实验，完成后汇报"><br><em>让学生跑个实验，完成后汇报</em></td>
+<td width="33%"><img src="assets/demos/exp.png" alt="让学生跑个实验，完成后汇报"><br><em>让学生跑个实验，完成后汇报</em></td>
 <td width="33%"><img src="assets/demos/cron.png" alt="让秘书每天早上自动把新论文报告给你"><br><em>让秘书每天早上自动把新论文报告给你</em></td>
 <td width="33%"><img src="assets/demos/newton1.png" alt="直接指导学生"><br><em>直接指导学生 (1)</em></td>
 </tr>
@@ -121,8 +135,77 @@ InternClaw是什么？
 <td width="33%"><img src="assets/demos/today_paper.png" alt="记录今天看过的论文"><br><em>记录今天看过的论文</em></td>
 </tr>
 </table>
+-->
 
-我们预设了200+科学技能以及10+智能体（学生）模版来帮助你完成科研中的各种任务
+## 使用案例
+
+作为PI，你只需要对秘书说出你想做什么：
+
+### 让学生找一下最新的论文
+
+<p align="center">
+  <a href="assets/demos/paper_report1.png">
+    <img src="assets/demos/paper_report1.png" alt="让学生找一下最新的论文示例 1" height="320" />
+  </a>
+  <a href="assets/demos/papre_report2.png">
+    <img src="assets/demos/papre_report2.png" alt="让学生找一下最新的论文示例 2" height="320" style="margin-left: 8px;" />
+  </a>
+</p>
+
+### 让 agent 接入远程服务器运行实验，并在完成后回传结果：
+
+<p align="center">
+  <a href="assets/demos/exp_xiami_hor.png">
+    <img src="assets/demos/exp_xiami_hor.png" alt="Agent 接入远程服务器运行实验并汇报结果示例 1" height="260" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="assets/demos/exp_ssh_hor.png">
+    <img src="assets/demos/exp_ssh_hor.png" alt="Agent 接入远程服务器运行实验并汇报结果示例 2" height="260" />
+  </a>
+</p>
+
+### 使用InternAgent平台完成ENSO模型比较，直接生成论文中可用图片
+
+<p align="center">
+  <a href="assets/demos/demo-internagent-enso.gif">
+    <img src="assets/demos/demo-internagent-enso.gif" alt="使用 InternAgent 平台完成 ENSO 模型比较并直接生成论文可用图片" height="420" />
+  </a>
+</p>
+
+### 基于已有成果进行基金申请书的写作
+
+<p align="center">
+  <a href="assets/demos/proposal_writing_agent.png">
+    <img src="assets/demos/proposal_writing_agent.png" alt="基于已有成果进行基金申请书写作示例 1" height="320" />
+  </a>
+  <a href="assets/demos/proposal_writing_res.png">
+    <img src="assets/demos/proposal_writing_res.png" alt="基于已有成果进行基金申请书写作示例 2" height="320" style="margin-left: 8px;" />
+  </a>
+</p>
+
+<!--
+### 自动迭代方案，实时追踪进度
+
+<p align="center">
+  <a href="assets/demo-internagent-ml-1.jpg">
+    <img src="assets/demo-internagent-ml-1.jpg" alt="自动迭代方案与实时进度追踪示例 1" height="320" />
+  </a>
+  <a href="assets/demos/demo-intern-ml-res.jpg">
+    <img src="assets/demos/demo-intern-ml-res.jpg" alt="自动迭代方案与实时进度追踪示例 2" height="320" style="margin-left: 8px;" />
+  </a>
+</p>
+-->
+
+### 稍微放松一下，和虾摸一起摸个鱼
+
+<p align="center">
+  <a href="assets/demo-xiamo.gif">
+    <img src="assets/demo-xiamo.gif" alt="和虾摸一起摸个鱼" height="420" />
+  </a>
+</p>
+
 
 ## 项目结构
 
@@ -230,35 +313,272 @@ InternClaw是什么？
 - **Web控制台**: 
 - **飞书(Lark)**: WebSocket 长连接 
 - **桌面端**: Tauri v2 前端 
-- **macOS 任务栏进程**: 任务栏图标管理InternClaw守护进程
+- **macOS 任务栏进程**: 任务栏图标管理DrClaw守护进程
 - **更多前端支持正在开发中**
 
 更多[测试中功能](#测试中功能).
 
+## 安全防护
+
+当前版本已经提供一部分安全防护，主要覆盖**文件保护**和**网络过滤**：
+
+- **文件保护**
+  - `write_file` / `edit_file` 默认只允许写入指定工作区
+  - `exec` / `long_exec` 在项目智能体下会启用工作区限制，并拦截一部分高风险命令与越界路径
+
+- **网络过滤**
+  - Web 控制台默认只监听 `127.0.0.1` / `::1` / `localhost`
+  - Web 请求会额外校验 loopback 来源、`Host` 头和本地 `Origin`，拒绝远程访问与非本机跨域访问
+
+需要注意：当前安全机制**不保证完全安全**，它更适合作为默认防护和误操作防护，而不是严格的安全边界。后续版本会继续加强沙箱、权限控制和网络访问限制，提供更完善的安全支持。
+
 ## 配置
 
-安装后，编辑 `~/.drclaw/config.json`，设置LLM API. 默认通过[litellm](https://docs.litellm.ai/docs/providers)
+安装后，编辑 `~/.drclaw/config.json`，设置 LLM API。当前配置结构为 `providers + active_provider`，默认通过 [litellm](https://docs.litellm.ai/docs/providers) 接入。
 
-**OpenRouter:**
+对于支持可调推理强度的模型（例如部分 GPT-5 系列），可在 provider 配置中额外设置 `"reasoning_effort"` 作为默认推理强度。当前支持的取值为 `none`、`minimal`、`low`、`medium`、`high`、`xhigh`，但不同模型支持的子集不同。该字段是 provider 默认配置，不会按单次 query 临时覆盖；是否生效取决于底层模型/provider 是否支持同名参数。
+
+正常执行安装脚本后，应该看到:
+
+```text
+DrClaw installed!
+
+  Source:  ~/.drclaw-src
+  Binary:  ~/.local/bin/drclaw
+  Config:  ~/.drclaw/config.json
+
+Next steps:
+  1. Set your API key in ~/.drclaw/config.json
+  2. Launch DrClaw:     drclaw daemon --debug-full -f web
+```
+
+更新 DrClaw：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/qzzqzzb/drclaw/main/install.sh) update
+```
+
+卸载程序但保留已有配置和项目数据：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/qzzqzzb/drclaw/main/install.sh) uninstall
+```
+
+
+配置好 API 后，直接启动：
+
+```bash
+drclaw daemon --debug-full -f web
+```
+
+默认启动后访问 `http://127.0.0.1:8080` 即可打开 Web 控制台。安装脚本已经自动执行 `drclaw onboard`.
+
+示例：
+
 ```json
 {
-  "provider": {
-    "api_key": "sk-or-v1-...",
-    "api_base": "https://openrouter.ai/api/v1",
-    "model": "openrouter/anthropic/claude-sonnet-4-5"
-  }
+  "providers": {
+    "default": {
+      "api_key": "YOUR_OPENAI_API_KEY",
+      "model": "openai/gpt-5",
+      "reasoning_effort": "high"
+    }
+  },
+  "active_provider": "default"
 }
 ```
 
-**Anthropic:**
+### 各个模型厂商接口配置
+
+<details>
+<summary>OpenRouter</summary>
+
 ```json
 {
-  "provider": {
-    "api_key": "sk-ant-...",
-    "model": "anthropic/claude-sonnet-4-5"
-  }
+  "providers": {
+    "default": {
+      "api_key": "sk-or-v1-...",
+      "api_base": "https://openrouter.ai/api/v1",
+      "model": "openrouter/anthropic/claude-sonnet-4-5"
+    }
+  },
+  "active_provider": "default"
 }
 ```
+</details>
+
+<details>
+<summary>Anthropic</summary>
+
+```json
+{
+  "providers": {
+    "default": {
+      "api_key": "sk-ant-...",
+      "model": "anthropic/claude-sonnet-4-5"
+    }
+  },
+  "active_provider": "default"
+}
+```
+</details>
+
+<details>
+<summary>GLM（智谱 OpenAI 兼容接口）</summary>
+
+注意：通过 LiteLLM 接入时，`model` 需要带 provider 前缀，推荐写成 `openai/glm-5` 或 `openai/glm-4.7-flash`。
+
+```json
+{
+  "providers": {
+    "default": {
+      "api_key": "YOUR_ZHIPU_API_KEY",
+      "api_base": "https://open.bigmodel.cn/api/paas/v4/",
+      "model": "openai/glm-5"
+    }
+  },
+  "active_provider": "default"
+}
+```
+
+如果你主要用于代码任务，也可以尝试智谱 coding 端点：
+
+```json
+{
+  "providers": {
+    "default": {
+      "api_key": "YOUR_ZHIPU_API_KEY",
+      "api_base": "https://open.bigmodel.cn/api/coding/paas/v4",
+      "model": "openai/glm-5"
+    }
+  },
+  "active_provider": "default"
+}
+```
+</details>
+
+<details>
+<summary>Kimi/Moonshot/Kimi coding plan</summary>
+
+推荐直接使用 Moonshot 配置：
+
+```json
+{
+  "providers": {
+    "default": {
+      "api_key": "YOUR_MOONSHOT_API_KEY",
+      "api_base": "https://api.moonshot.cn/v1",
+      "model": "moonshot/kimi-k2.5"
+    }
+  },
+  "active_provider": "default"
+}
+```
+
+或使用 OpenAI 兼容端点：
+
+```json
+{
+  "providers": {
+    "default": {
+      "api_key": "YOUR_MOONSHOT_API_KEY",
+      "api_base": "https://api.moonshot.cn/v1",
+      "model": "openai/kimi-k2.5"
+    }
+  },
+  "active_provider": "default"
+}
+```
+
+如果你使用的是 Kimi Coding Plan，也可以改用下面这组配置：
+
+```json
+{
+  "providers": {
+    "default": {
+      "api_key": "sk-kimi-***",
+      "api_base": "https://api.kimi.com/coding",
+      "model": "anthropic/k2p5"
+    }
+  },
+  "active_provider": "default"
+}
+```
+</details>
+
+<details>
+<summary>OAuth LLM 提供商（OpenAI Codex / GitHub Copilot）</summary>
+
+除 API Key 之外，DrClaw 支持通过 OAuth 登录 OpenAI Codex 和 GitHub Copilot，无需提供 API 密钥。
+
+**完整步骤（从零开始）：**
+
+#### 1. 初始化
+
+```bash
+drclaw onboard
+```
+
+#### 2. OAuth 登录
+
+根据你使用的提供商选择一个：
+
+```bash
+# OpenAI Codex
+drclaw provider login openai-codex
+
+# GitHub Copilot
+drclaw provider login github-copilot
+```
+
+OpenAI Codex 会启动浏览器交互式 OAuth 流程；GitHub Copilot 使用设备码流程（device flow），终端会显示一个验证码和链接。
+
+#### 3. 修改配置
+
+编辑 `~/.drclaw/config.json`，将 OAuth 提供商配置写到 `providers.default`，并把 `active_provider` 指向 `default`；`api_key` 留空即可：
+
+```json
+{
+  "providers": {
+    "default": {
+      "model": "openai-codex/gpt-5.1-codex",
+      "api_key": ""
+    }
+  },
+  "active_provider": "default"
+}
+```
+
+GitHub Copilot 示例：
+
+```json
+{
+  "providers": {
+    "default": {
+      "model": "github_copilot/gpt-4o",
+      "api_key": ""
+    }
+  },
+  "active_provider": "default"
+}
+```
+
+#### 4. 启动
+
+```bash
+# 命令行聊天
+drclaw chat
+
+# 或 macOS 托盘模式
+drclaw tray
+
+# 或 daemon 模式
+drclaw daemon --debug-full -f web
+```
+
+登录后的 OAuth token 会被缓存，后续启动自动使用，无需重复登录。
+
+</details>
 
 **Serper网页搜索:**
 ```json
@@ -275,13 +595,68 @@ InternClaw是什么？
 }
 ```
 
+**在Docker中运行**
+上述配置如果是在 Docker 中运行，Web 前端默认会因为网络限制而无法启动
+
+如果你明确知道自己是在 Docker 中使用，需要额外开启：
+
+```json
+{
+  "daemon": {
+    "web_in_docker": true
+  }
+}
+```
+
+开启后，Web 前端会改为绑定 `0.0.0.0`，并放宽 Docker 网桥带来的来源地址限制。适用于类似下面的本机端口映射
+
+```bash
+docker run -p 127.0.0.1:8080:8080 ...
+```
+
+注意：这个配置项只针对 Web 控制台
+
 ## 测试中功能
 
 一系列测试中功能正在逐步完善。这些功能未经过充分测试，请谨慎使用。
 
-### 外部智能体接入（External Agent Protocol）
+<details>
+<summary>单 Project 多 Agent</summary>
 
-将任意外部智能体连接到InternClaw中，让InternClaw一并管理，派发任务，收取结果会汇报给你。
+单个 project 现在支持一个 `project manager` 加多个 `student agent` 的层级结构。
+
+- `proj:<project_id>` 是项目对外唯一的 manager agent，负责接收 `main agent` 的项目级任务
+- `student:<project_id>:<student_id>` 是项目内部 student agent，当前主要由 project manager 调度，不接受 `main agent` 直接下发任务
+- `main agent` 现在可以管理 student lifecycle：列出、创建、更新、启用/禁用、删除某个 project 下的 students
+- 同一 project 下的 students 共享 `projects/<project_id>/workspace`
+- manager 和每个 student 都有独立的 `MEMORY.md`、`HISTORY.md`、session history 和 SOUL / 配置目录
+- 每个 student 还有独立的私有目录 `projects/<project_id>/agents/<student_id>/`，用于保存 memory/history/session/private skills
+- student 的 shell 可执行根目录现在包含 `project workspace + student private workspace`
+- `main agent` 现在可以把 local-hub skill 单独安装到某个 student 的私有 `skills/` 目录，不影响 manager 或其他 students
+- student 的 skill 加载顺序为：`student private skills > project workspace skills > global skills`
+- `/api/agents` 和 daemon 运行时已经能区分 `project_manager` 与 `project_student`
+- daemon 在 `--debug` / `--debug-full` 下会输出 student agent 的执行摘要，并在 debug jsonl 中记录 `agent_id`
+
+</details>
+
+<details>
+<summary>Docker Sandbox Job</summary>
+
+Student agent 现在可以通过 `create_job` 启动一个 Docker sandbox job 来执行高风险 shell 任务。
+
+- 该能力目前只对 student / project agent 暴露，main agent 不直接使用它（也不应该使用）
+- `shell_task`：student agent 提交命令后，由宿主机上的 manager 启动 Docker 容器执行
+- 默认异步执行：`await_result=false` 时会立即返回 `job_id` / `request_id`，任务在后台继续运行
+- 可通过 `get_job_status` / `list_active_jobs` 查看状态，并使用 `pause_job` / `resume_job` / `cancel_job` 控制运行中的 job
+- 容器完成后会自动退出并清理；保留 job 记录、workspace 和 artifacts
+- 仍属于测试中能力，后续补充 approval、容器内 agent worker 和更严格的网络/权限控制
+
+</details>
+
+<details>
+<summary>外部智能体接入（External Agent Protocol）</summary>
+
+将任意外部智能体连接到DrClaw中，让DrClaw一并管理，派发任务，收取结果会汇报给你。
 
 外部智能体配置文件： `~/.drclaw/config.json`:
 
@@ -301,7 +676,7 @@ InternClaw是什么？
 }
 ```
 
-当用户或任意InternClaw内部智能体发送消息到`ext:chem`, InternClaw将会发送:
+当用户或任意DrClaw内部智能体发送消息到`ext:chem`, DrClaw将会发送:
 
 ```json
 {
@@ -347,6 +722,101 @@ InternClaw是什么？
 - 出于安全考虑，当前版本只建议和本地部署的外部智能体通信
 - 当前版本不支持鉴权机制
 
+</details>
+
+<details>
+<summary>调用coding agent</summary>
+
+DrClaw 现在支持让 `project agent` 通过现有的 `exec` / `long_exec` 工具直接执行标准 `acpx` CLI，从而使用 Codex。当前实现**不新增专用 acpx tool**，也**不把 acpx 做成 provider**；agent 看到的是 ACPX 使用说明和内置 skill，然后自己调用 shell 工具执行命令。
+
+前提:
+- 宿主机已全局安装 `acpx`
+- `acpx codex ...` 已能在宿主机终端正常运行
+
+#### 1. 初始化内置 ACPX skill
+
+如果是新安装，直接执行：
+
+```bash
+drclaw onboard
+```
+
+如果是旧数据目录，也可以重新执行一次 `drclaw onboard`，它会把缺失的内置 skill 补到 `~/.drclaw/skills/`。完成后应能看到：
+
+```bash
+ls ~/.drclaw/skills/acpx
+```
+
+#### 2. 修改配置
+
+在 `~/.drclaw/config.json` 中加入：
+
+```json
+{
+  "acpx": {
+    "enabled": true,
+    "command": "acpx",
+    "default_agent": "codex",
+    "prefer_long_exec": true
+  }
+}
+```
+
+说明:
+- `enabled=true`：向 `project agent` 注入 ACPX 使用说明
+- `command`：默认执行的 ACPX 二进制名
+- `default_agent`：当前推荐为 `codex`
+- `prefer_long_exec=true`：默认优先用 `long_exec` 跑 ACPX，避免 60 秒超时
+
+#### 3. 如何测试是否可用
+
+先在宿主机上确认 ACPX 本身没问题：
+
+```bash
+acpx --help
+acpx codex exec 'Reply with exactly: acpx-ok'
+```
+
+然后创建一个测试agent：
+
+```bash
+drclaw projects create "acpx-test"
+```
+
+向测试agent发送：
+
+```text
+不要直接回答。请使用 long_exec 调用 acpx codex exec，并让它输出 exactly: drclaw-acpx-ok。把执行命令和结果都告诉我。
+```
+
+如果要测试persistent session，发送：
+
+```text
+请使用 long_exec 执行以下命令：
+1. acpx codex sessions ensure --name drclaw-proj-<当前项目id>-smoke
+2. acpx codex -s drclaw-proj-<当前项目id>-smoke 'Reply with exactly: session-ok'
+3. acpx codex -s drclaw-proj-<当前项目id>-smoke status
+4. acpx codex sessions close drclaw-proj-<当前项目id>-smoke
+把每一步的命令和结果都返回给我。
+```
+
+通过标准:
+- agent 明确调用了 `exec` 或 `long_exec`
+- 实际执行了 `acpx codex ...`
+- 返回的是 ACPX / Codex 的真实输出，而不是 agent 自己直接编写的答案
+
+#### 4. Session 命名与关闭
+
+- `acpx codex exec ...` 是一次性调用，不需要额外关闭 session
+- 如果 agent 创建持久 session，约定必须使用前缀：`drclaw-proj-<project-id>-`
+- 持久 session 不会随着 DrClaw 退出而自动关闭；任务结束后应显式执行：
+
+```bash
+acpx codex sessions close drclaw-proj-<project-id>-<task-suffix>
+```
+
+</details>
+
 ## 使用
 
 ```bash
@@ -365,8 +835,8 @@ drclaw projects create "My Research"
 drclaw status
 
 # Daemon mode
-drclaw daemon -f web
-drclaw daemon -f feishu
+drclaw daemon --debug-full -f web
+drclaw daemon --debug-full -f feishu
 
 # macOS tray
 drclaw tray
@@ -418,7 +888,7 @@ Tray config in `~/.drclaw/config.json`:
 {
   "tray": {
     "control_panel_url": "http://127.0.0.1:8080",
-    "daemon_program": ["uv","run","drclaw","daemon","-f","web"],
+    "daemon_program": ["uv","run","drclaw","daemon","--debug-full","-f","web"],
     "daemon_env": {},
     "shutdown_timeout_seconds": 8
   }
@@ -439,8 +909,9 @@ drclaw launchd uninstall
 
 1. Create a Feishu app at https://open.feishu.cn/app, enable **Bot**
 2. Add permissions: `im:message` (send), `im:message.p2p_msg:readonly` (receive)
-3. Add event `im.message.receive_v1`, choose **Long Connection** mode
-4. Configure `~/.drclaw/config.json`:
+3. `drclaw daemon --debug-full -f feishu`
+4. Add event `im.message.receive_v1`, choose **Long Connection** mode
+5. Configure `~/.drclaw/config.json`:
 
 ```json
 {
@@ -455,7 +926,6 @@ drclaw launchd uninstall
 }
 ```
 
-5. `drclaw daemon -f feishu`
 6. Publish app and send a message to the bot
 
 **Troubleshooting:**

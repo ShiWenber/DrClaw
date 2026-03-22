@@ -44,6 +44,23 @@ async def test_main_agent_direct_response(
     assert result == "Hello from main agent!"
 
 
+def test_main_agent_does_not_register_remote_tmux_tools(main_agent: MainAgent) -> None:
+    names = set(main_agent.loop.tool_registry.tool_names)
+    assert "start_remote_tmux_session" not in names
+    assert "get_remote_tmux_session_status" not in names
+    assert "list_remote_tmux_sessions" not in names
+    assert "terminate_remote_tmux_session" not in names
+
+
+def test_main_agent_registers_project_student_management_tools(main_agent: MainAgent) -> None:
+    names = set(main_agent.loop.tool_registry.tool_names)
+    assert "list_project_students" in names
+    assert "create_project_student" in names
+    assert "update_project_student" in names
+    assert "remove_project_student" in names
+    assert "add_local_hub_skills_to_project_student" in names
+
+
 @pytest.mark.asyncio
 async def test_main_agent_web_dispatch_applies_zh_language_directive(
     main_agent: MainAgent, mock_provider: MockProvider
@@ -120,6 +137,33 @@ async def test_main_agent_create_project(
     projects = main_agent.project_store.list_projects()
     assert len(projects) == 1
     assert projects[0].name == "Quantum"
+
+
+@pytest.mark.asyncio
+async def test_main_agent_create_project_with_soul_append(
+    main_agent: MainAgent, mock_provider: MockProvider
+) -> None:
+    mock_provider.queue(
+        make_tool_response(
+            "create_project",
+            {
+                "name": "PersonaQuantum",
+                "description": "quantum research",
+                "soul_append": "## Project Direction\n- Prioritize reproducibility.",
+            },
+        ),
+        make_text_response("Created project PersonaQuantum."),
+    )
+    result = await main_agent.process_direct("create a project called PersonaQuantum")
+    assert "PersonaQuantum" in result
+
+    projects = main_agent.project_store.list_projects()
+    assert len(projects) == 1
+    project = projects[0]
+    soul_file = main_agent.config.data_path / "projects" / project.id / "workspace" / "SOUL.md"
+    soul = soul_file.read_text(encoding="utf-8")
+    assert "## Project Direction" in soul
+    assert "Prioritize reproducibility." in soul
 
 
 @pytest.mark.asyncio
@@ -249,6 +293,7 @@ async def test_main_agent_route_to_project(
         main_agent.config, main_agent.provider, project,
         debug_logger=main_agent.loop.debug_logger,
         equipment_manager=main_agent.equipment_manager,
+        sandbox_job_manager=main_agent.sandbox_job_manager,
         env_store=main_agent.env_store,
     )
     fake_instance.process_direct.assert_called_once_with("research ocean depths")
@@ -274,8 +319,12 @@ def test_main_agent_has_filesystem_tools(
         "web_fetch",
         "message",
         "list_projects",
+        "list_project_students",
         "create_project",
+        "create_project_student",
+        "update_project_student",
         "remove_project",
+        "remove_project_student",
         "route_to_project",
         "set_env_var",
         "unset_env_var",
@@ -288,6 +337,7 @@ def test_main_agent_has_filesystem_tools(
         "import_skill_to_local_hub",
         "add_local_hub_skills_to_equipment",
         "add_local_hub_skills_to_project",
+        "add_local_hub_skills_to_project_student",
         "list_local_skill_hub_categories",
         "set_local_skill_hub_category_metadata",
         "use_equipment",
@@ -381,6 +431,8 @@ def test_main_agent_creates_soul_file(
     assert soul_file.is_file()
     assert "Identity & Persona" in soul_file.read_text(encoding="utf-8")
     assert "Be 虾秘, the main DrClaw assistant." in prompt
+    assert "default to uv" in prompt
+    assert "seek help from the user or caller" in prompt
 
 
 @pytest.mark.asyncio
@@ -445,6 +497,31 @@ async def test_route_with_bus_publishes_to_topic(
     assert msg.metadata.get("reply_to_topic") == "main"
     assert msg.metadata.get("reply_channel") == "cli"
     assert msg.metadata.get("reply_chat_id") == f"proj-{project.id}"
+
+
+@pytest.mark.asyncio
+async def test_route_with_bus_ensures_project_is_active_before_publish(
+    config: DrClawConfig, mock_provider: MockProvider
+) -> None:
+    ensure_project_active = AsyncMock()
+    agent = MainAgent(
+        config,
+        mock_provider,
+        ensure_project_active=ensure_project_active,
+    )
+    bus = MessageBus()
+    agent.loop.bus = bus
+
+    project = agent.project_store.create_project("Cat")
+    topic = f"proj:{project.id}"
+
+    result = await agent._route_to_project(project, "hello cat")
+
+    assert "Routed to Cat" in result
+    ensure_project_active.assert_awaited_once_with(project)
+    msg = await asyncio.wait_for(bus.consume_inbound(topic), timeout=1.0)
+    assert msg.text == "hello cat"
+    assert msg.source == "main"
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,7 @@ build/
 
 nanobot/
 nanoclaw/
+openclaw-claude-code-skill/
 
 # Dolt database files (added by bd init)
 .dolt/
@@ -18,9 +19,13 @@ nanoclaw/
 # Internal project management
 .beads/
 implementation_records/
+tmp/
 
 # macOS
 .DS_Store
+
+# Local demo assets
+assets/demos/demo-internagent-enso.gif
 
 # Claude Code
 .claude/
@@ -33,3 +38,4 @@ CHANGELOG.md
 desktop/node_modules/
 desktop/src-tauri/target/
 desktop/dist/
+drclaw/local_skill_hub/code/internagent-api/SKILL.md

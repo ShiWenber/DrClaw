@@ -538,6 +538,21 @@ class TestExecTool:
         result = await tool.execute({"command": "rm -rf /"})
         assert "blocked" in result.lower()
 
+    async def test_deny_pattern_rm_long_flags(self) -> None:
+        tool = ExecTool()
+        result = await tool.execute({"command": "rm --recursive --force /"})
+        assert "blocked" in result.lower()
+
+    async def test_deny_pattern_rm_mixed_short_and_long_flags(self) -> None:
+        tool = ExecTool()
+        result = await tool.execute({"command": "rm -r --force /"})
+        assert "blocked" in result.lower()
+
+    async def test_deny_pattern_rm_after_command_separator(self) -> None:
+        tool = ExecTool()
+        result = await tool.execute({"command": "echo safe && rm --force file.txt"})
+        assert "blocked" in result.lower()
+
     async def test_deny_pattern_fork_bomb(self) -> None:
         tool = ExecTool()
         result = await tool.execute({"command": ":() { :|: & };:"})
@@ -562,6 +577,75 @@ class TestExecTool:
         tool = ExecTool(restrict_to_workspace=True, working_dir=workspace)
         result = await tool.execute({"command": "cat ../secret"})
         assert "blocked" in result.lower()
+
+    async def test_restrict_to_workspace_blocks_double_quoted_absolute_path(
+        self, workspace: Path, tmp_path: Path
+    ) -> None:
+        outside = tmp_path / "secret.txt"
+        outside.write_text("secret", encoding="utf-8")
+        tool = ExecTool(restrict_to_workspace=True, working_dir=workspace)
+        result = await tool.execute({"command": f'cat "{outside}"'})
+        assert "blocked" in result.lower()
+
+    async def test_restrict_to_workspace_blocks_single_quoted_absolute_path(
+        self, workspace: Path, tmp_path: Path
+    ) -> None:
+        outside = tmp_path / "secret.txt"
+        outside.write_text("secret", encoding="utf-8")
+        tool = ExecTool(restrict_to_workspace=True, working_dir=workspace)
+        result = await tool.execute({"command": f"cat '{outside}'"})
+        assert "blocked" in result.lower()
+
+    async def test_restrict_to_workspace_blocks_working_dir_outside_workspace(
+        self, workspace: Path, tmp_path: Path
+    ) -> None:
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        tool = ExecTool(restrict_to_workspace=True, working_dir=workspace)
+        result = await tool.execute({"command": "pwd", "working_dir": str(outside)})
+        assert "blocked" in result.lower()
+
+    async def test_restrict_to_workspace_allows_working_dir_within_workspace(
+        self, workspace: Path
+    ) -> None:
+        subdir = workspace / "subdir"
+        subdir.mkdir()
+        tool = ExecTool(restrict_to_workspace=True, working_dir=workspace)
+        result = await tool.execute({"command": "pwd", "working_dir": "subdir"})
+        assert str(subdir.resolve()) in result
+
+    async def test_restrict_to_workspace_allows_working_dir_in_secondary_root(
+        self, workspace: Path, tmp_path: Path
+    ) -> None:
+        private_root = tmp_path / "private"
+        private_root.mkdir()
+        tool = ExecTool(
+            restrict_to_workspace=True,
+            working_dir=workspace,
+            allowed_working_dirs=[private_root],
+        )
+        result = await tool.execute({"command": "pwd", "working_dir": str(private_root)})
+        assert str(private_root.resolve()) in result
+
+    async def test_restrict_to_workspace_allows_absolute_paths_in_secondary_root(
+        self, workspace: Path, tmp_path: Path
+    ) -> None:
+        private_root = tmp_path / "private"
+        private_root.mkdir()
+        marker = private_root / "note.txt"
+        marker.write_text("private", encoding="utf-8")
+        tool = ExecTool(
+            restrict_to_workspace=True,
+            working_dir=workspace,
+            allowed_working_dirs=[private_root],
+        )
+        result = await tool.execute({"command": f'cat "{marker}"'})
+        assert "private" in result
+
+    async def test_restrict_to_workspace_allows_dev_null(self, workspace: Path) -> None:
+        tool = ExecTool(restrict_to_workspace=True, working_dir=workspace)
+        result = await tool.execute({"command": f"ls {workspace} 2>/dev/null"})
+        assert "blocked" not in result.lower()
 
     async def test_output_truncated_at_10k(self) -> None:
         tool = ExecTool()

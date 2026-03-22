@@ -33,6 +33,7 @@ def test_onboard_fresh(tmp_path: Path) -> None:
     assert "Initialized" in result.output
     assert (data_dir / "config.json").exists()
     assert (data_dir / "skills").is_dir()
+    assert (data_dir / "skills" / "acpx" / "SKILL.md").is_file()
     assert (data_dir / "assets").is_dir()
     assert (data_dir / "local-skill-hub").is_dir()
     assert (data_dir / "agent-hub").is_dir()
@@ -462,6 +463,23 @@ def test_cron_run_executes_job(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "Job executed" in result.output
     execute.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# daemon
+# ---------------------------------------------------------------------------
+
+
+def test_daemon_rejects_invalid_config_file(tmp_path: Path) -> None:
+    data_dir = tmp_path / "drclaw_data"
+    data_dir.mkdir()
+    (data_dir / "config.json").write_text("{invalid json", encoding="utf-8")
+
+    with patch("drclaw.cli.app.get_data_dir", return_value=data_dir):
+        result = runner.invoke(app, ["daemon"])
+
+    assert result.exit_code == 1
+    assert "Invalid config JSON" in result.output
 
 
 # ---------------------------------------------------------------------------

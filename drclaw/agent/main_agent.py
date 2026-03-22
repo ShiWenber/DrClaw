@@ -1,7 +1,8 @@
-"""Main Agent orchestrator — top-level routing agent."""
+"""Main Agent orchestrator - top-level routing agent."""
 
 from __future__ import annotations
 
+import inspect
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
@@ -17,6 +18,7 @@ from drclaw.config.schema import DrClawConfig
 from drclaw.cron.service import CronService
 from drclaw.equipment.manager import EquipmentRuntimeManager
 from drclaw.equipment.prototypes import EquipmentPrototypeStore
+from drclaw.frontends.web.chat_files import ChatFileStore
 from drclaw.models.messages import InboundMessage, OutboundMessage
 from drclaw.models.project import (
     AmbiguousProjectNameError,
@@ -25,6 +27,8 @@ from drclaw.models.project import (
     ProjectStore,
 )
 from drclaw.providers.base import LLMProvider
+from drclaw.sandbox.backends import DockerSandboxBackend
+from drclaw.sandbox.manager import SandboxJobManager
 from drclaw.session.manager import SessionManager
 from drclaw.skills.local_hub import LocalSkillHubStore
 from drclaw.soul import load_main_soul
@@ -45,6 +49,7 @@ from drclaw.tools.equipment_admin_tools import (
     AddEquipmentTool,
     AddLocalHubSkillsToEquipmentTool,
     AddLocalHubSkillsToProjectTool,
+    AddLocalHubSkillsToProjectStudentTool,
     ImportSkillToLocalHubTool,
     ListEquipmentsTool,
     ListLocalSkillHubCategoriesTool,
@@ -60,10 +65,14 @@ from drclaw.tools.equipment_tools import (
 from drclaw.tools.external_agent_tools import CallExternalAgentTool
 from drclaw.tools.message import MessageTool
 from drclaw.tools.project_tools import (
+    CreateProjectStudentTool,
     CreateProjectTool,
     ListProjectsTool,
+    ListProjectStudentsTool,
     RemoveProjectTool,
+    RemoveProjectStudentTool,
     RouteToProjectTool,
+    UpdateProjectStudentTool,
 )
 from drclaw.tools.registry import ToolRegistry
 from drclaw.utils.helpers import ensure_default_skill_dirs
@@ -87,9 +96,15 @@ def _build_identity(
     base = load_main_soul(data_dir)
     base += (
         "\n\n## Skill Grant Policy\n"
-        "- If a request is to grant a specific student/project access to a local-hub skill, "
+        "- If a request is to grant a local-hub skill to a whole project, "
         "prefer add_local_hub_skills_to_project.\n"
+        "- If a request is to grant a local-hub skill to one specific project student, "
+        "prefer add_local_hub_skills_to_project_student.\n"
         "- Use equipment provisioning tools only when the user asks for shared equipment access."
+        "\n\n## Project Student Management\n"
+        "- You can manage student agents under a project with the project student tools.\n"
+        "- Use these tools for project structure changes such as creating, updating, enabling, disabling, or removing student agents.\n"
+        "- Project manager agents should focus on delegating work, not changing the project's student roster."
     )
     projects = project_store.list_projects()
     if not projects:
@@ -97,7 +112,7 @@ def _build_identity(
     else:
         lines = ["\n\n## Active Students (Project-Backed)"]
         for p in projects:
-            desc = f" — {p.description}" if p.description else ""
+            desc = f" - {p.description}" if p.description else ""
             lines.append(f"- [{p.id}] {p.name}{desc} ({p.status})")
         identity = base + "\n".join(lines)
     if response_language == "zh":
@@ -127,7 +142,10 @@ class MainAgent:
         debug_logger: DebugLogger | None = None,
         on_project_create: Callable[[Project], Any] | None = None,
         on_project_remove: Callable[[str], Awaitable[Any] | Any] | None = None,
+        on_project_update: Callable[[Project], Awaitable[Any] | Any] | None = None,
+        ensure_project_active: Callable[[Project], Awaitable[Any] | Any] | None = None,
         equipment_manager: EquipmentRuntimeManager | None = None,
+        sandbox_job_manager: SandboxJobManager | None = None,
         env_store: EnvStore | None = None,
         cron_service: CronService | None = None,
         external_agent_bridge: ExternalAgentBridge | None = None,
@@ -153,11 +171,19 @@ class MainAgent:
             config=config,
             env_store=self.env_store,
         )
+        sandbox_runtime_root = data_dir / "runtime" / "sandbox_jobs"
+        sandbox_runtime_root.mkdir(parents=True, exist_ok=True)
+        self.sandbox_job_manager = sandbox_job_manager or SandboxJobManager(
+            runtime_root=sandbox_runtime_root,
+            backend=DockerSandboxBackend(),
+        )
 
         self.project_store = JsonProjectStore(data_dir)
         self.cron_service = cron_service or CronService(data_dir / "cron" / "jobs.json")
         self.memory_store = MemoryStore(data_dir)
         self.session_manager = SessionManager(data_dir / "sessions")
+        self._ensure_project_active = ensure_project_active
+        self._on_project_update = on_project_update
 
         def env_provider() -> dict[str, str]:
             return self.env_store.get_effective_env("main")
@@ -196,7 +222,33 @@ class MainAgent:
             )
         )
         registry.register(ListProjectsTool(self.project_store))
-        registry.register(CreateProjectTool(self.project_store, on_create=on_project_create))
+        registry.register(ListProjectStudentsTool(self.project_store))
+        registry.register(
+            CreateProjectTool(
+                self.project_store,
+                projects_dir=data_dir / "projects",
+                on_create=on_project_create,
+            )
+        )
+        registry.register(
+            CreateProjectStudentTool(
+                self.project_store,
+                projects_dir=data_dir / "projects",
+                on_update=self._on_project_update,
+            )
+        )
+        registry.register(
+            UpdateProjectStudentTool(
+                self.project_store,
+                on_update=self._on_project_update,
+            )
+        )
+        registry.register(
+            RemoveProjectStudentTool(
+                self.project_store,
+                on_update=self._on_project_update,
+            )
+        )
         registry.register(SetEnvVarTool(self.env_store))
         registry.register(UnsetEnvVarTool(self.env_store))
         registry.register(ListEnvVarsTool(self.env_store))
@@ -233,6 +285,13 @@ class MainAgent:
         )
         registry.register(
             AddLocalHubSkillsToProjectTool(
+                self.project_store,
+                data_dir / "projects",
+                local_skill_hub,
+            )
+        )
+        registry.register(
+            AddLocalHubSkillsToProjectStudentTool(
                 self.project_store,
                 data_dir / "projects",
                 local_skill_hub,
@@ -291,8 +350,49 @@ class MainAgent:
         if bus is None:
             raise RuntimeError("message tool unavailable: message bus is not configured")
 
+        attachments: list[dict[str, Any]] = []
+        if msg.media:
+            file_store = ChatFileStore(self.config.data_path)
+            for media_path in msg.media:
+                try:
+                    rec = file_store.ingest_outbound_media(Path(media_path))
+                except (OSError, ValueError):
+                    continue
+                attachments.append(
+                    {
+                        "id": rec.file_id,
+                        "name": rec.name,
+                        "mime": rec.mime,
+                        "size": rec.size,
+                        "path": str(rec.path),
+                        "download_url": file_store.download_url(rec.file_id),
+                    }
+                )
+
         msg.source = self.loop.agent_id
         msg.topic = self.loop.agent_id
+        if attachments:
+            msg.metadata = dict(msg.metadata)
+            msg.metadata["attachments"] = attachments
+
+            inbound = self.loop._current_inbound
+            if (
+                inbound is not None
+                and msg.channel == inbound.channel
+                and msg.chat_id == inbound.chat_id
+            ):
+                session = self.loop._active_session
+                if session is None:
+                    session = self.session_manager.load("main")
+                session.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": msg.text,
+                        "source": self.loop.agent_id,
+                        "attachments": attachments,
+                    }
+                )
+                self.session_manager.save(session)
         await bus.publish_outbound(msg)
 
     def _current_webui_language(self) -> str:
@@ -341,7 +441,12 @@ class MainAgent:
         """
         bus = self.loop.bus
         self.equipment_manager.bus = bus
+        self.sandbox_job_manager.bus = bus
         if bus is not None:
+            if self._ensure_project_active is not None:
+                maybe = self._ensure_project_active(project)
+                if inspect.isawaitable(maybe):
+                    await maybe
             origin = self.loop._current_inbound
             channel = origin.channel if origin else "cli"
             chat_id = origin.chat_id if origin else f"proj-{project.id}"
@@ -385,6 +490,7 @@ class MainAgent:
             project,
             debug_logger=self.loop.debug_logger,
             equipment_manager=self.equipment_manager,
+            sandbox_job_manager=self.sandbox_job_manager,
             env_store=self.env_store,
         )
         return await agent.process_direct(message)
@@ -476,4 +582,5 @@ class MainAgent:
         """
         self.loop.bus = bus
         self.equipment_manager.bus = bus
+        self.sandbox_job_manager.bus = bus
         await self.loop.run()

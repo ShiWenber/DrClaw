@@ -15,7 +15,12 @@ from drclaw.agent.activation_state import ProjectActivationStateStore
 from drclaw.agent.debug import DebugLogger
 from drclaw.agent.loop import AgentLoop
 from drclaw.agent.main_agent import MainAgent
-from drclaw.agent.project_agent import ProjectAgent
+from drclaw.agent.project_agent import (
+    ProjectAgent,
+    StudentProjectAgent,
+    project_manager_agent_id,
+    project_student_agent_id,
+)
 from drclaw.bus.queue import MessageBus
 from drclaw.claude_code.manager import ClaudeCodeSessionManager
 from drclaw.config.env_store import EnvStore
@@ -26,6 +31,8 @@ from drclaw.equipment.prototypes import EquipmentPrototypeStore
 from drclaw.external_agents.bridge import ExternalAgentBridge
 from drclaw.models.project import Project, ProjectStore
 from drclaw.providers.base import LLMProvider
+from drclaw.sandbox.backends import DockerSandboxBackend
+from drclaw.sandbox.manager import SandboxJobManager
 from drclaw.usage.store import AgentUsageStore
 
 
@@ -38,7 +45,7 @@ class AgentStatus(Enum):
 @dataclass
 class AgentHandle:
     agent_id: str
-    agent_type: Literal["main", "project"]
+    agent_type: Literal["main", "project_manager", "project_student"]
     label: str
     project: Project | None
     loop: AgentLoop
@@ -87,6 +94,13 @@ class AgentRegistry:
             env_store=self.env_store,
             usage_store=self.usage_store,
         )
+        sandbox_runtime_root = config.data_path / "runtime" / "sandbox_jobs"
+        sandbox_runtime_root.mkdir(parents=True, exist_ok=True)
+        self.sandbox_job_manager = SandboxJobManager(
+            runtime_root=sandbox_runtime_root,
+            backend=DockerSandboxBackend(),
+            bus=bus,
+        )
         cc = config.claude_code
         self.claude_code_manager = ClaudeCodeSessionManager(
             bus=bus,
@@ -96,6 +110,11 @@ class AgentRegistry:
             default_max_turns=cc.max_turns,
             default_permission_mode=cc.permission_mode,
             default_allowed_tools=list(cc.allowed_tools),
+            default_env=dict(cc.env) if cc.env else None,
+            log_dir=config.data_path / "debug" / "claude_code",
+            max_retries=cc.max_retries,
+            retry_base_delay_seconds=cc.retry_base_delay_seconds,
+            retry_max_delay_seconds=cc.retry_max_delay_seconds,
         )
 
     def start_main(self, debug_logger: DebugLogger | None = None) -> AgentHandle:
@@ -117,7 +136,15 @@ class AgentRegistry:
                 p, interactive=True, debug_logger=debug_logger,
             ),
             on_project_remove=self.remove_project_agent,
+            on_project_update=lambda p: self.refresh_project(
+                p,
+                debug_logger=debug_logger,
+            ),
+            ensure_project_active=lambda p: self.activate_project(
+                p, interactive=True, debug_logger=debug_logger,
+            ),
             equipment_manager=self.equipment_manager,
+            sandbox_job_manager=self.sandbox_job_manager,
             env_store=self.env_store,
             cron_service=self.cron_service,
             external_agent_bridge=self.external_agent_bridge,
@@ -155,7 +182,7 @@ class AgentRegistry:
         Idempotent if a RUNNING agent exists for this project.
         Replaces DONE/ERROR agents with a fresh instance.
         """
-        agent_id = f"proj:{project.id}"
+        agent_id = project_manager_agent_id(project.id)
 
         existing = self._handles.get(agent_id)
         if existing and existing.status == AgentStatus.RUNNING:
@@ -169,9 +196,15 @@ class AgentRegistry:
             project,
             debug_logger=debug_logger,
             equipment_manager=self.equipment_manager,
+            sandbox_job_manager=self.sandbox_job_manager,
             env_store=self.env_store,
             claude_code_manager=self.claude_code_manager,
             external_agent_bridge=self.external_agent_bridge,
+            ensure_student_active=lambda student: self.spawn_project_student(
+                project,
+                student.id,
+                debug_logger=debug_logger,
+            ),
         )
         max_iter = self.config.agent.max_iterations if interactive else 15
         agent.loop.max_iterations = max_iter
@@ -185,7 +218,7 @@ class AgentRegistry:
         task = asyncio.create_task(agent.loop.run())
         handle = AgentHandle(
             agent_id=agent_id,
-            agent_type="project",
+            agent_type="project_manager",
             label=project.name,
             project=project,
             loop=agent.loop,
@@ -194,6 +227,83 @@ class AgentRegistry:
         task.add_done_callback(lambda t, aid=agent_id: self._on_task_done(aid, t))
         self._handles[agent_id] = handle
         self._mark_project_activated(project.id)
+        self._spawn_project_students(project, debug_logger=debug_logger)
+        logger.info("agent {} activates", handle.agent_id)
+        return handle
+
+    def _spawn_project_students(
+        self,
+        project: Project,
+        *,
+        debug_logger: DebugLogger | None = None,
+    ) -> list[AgentHandle]:
+        handles: list[AgentHandle] = []
+        for student in project.student_agents:
+            if not student.enabled:
+                continue
+            handles.append(
+                self.spawn_project_student(
+                    project,
+                    student.id,
+                    debug_logger=debug_logger,
+                )
+            )
+        return handles
+
+    def spawn_project_student(
+        self,
+        project: Project,
+        student_id: str,
+        *,
+        debug_logger: DebugLogger | None = None,
+    ) -> AgentHandle:
+        student = next(
+            (item for item in project.student_agents if item.id == student_id and item.enabled),
+            None,
+        )
+        if student is None:
+            raise ValueError(
+                f"enabled student agent {student_id!r} not found in project {project.id!r}"
+            )
+
+        agent_id = project_student_agent_id(project.id, student.id)
+        existing = self._handles.get(agent_id)
+        if existing and existing.status == AgentStatus.RUNNING:
+            return existing
+        if existing:
+            del self._handles[agent_id]
+
+        agent = StudentProjectAgent(
+            self.config,
+            self.provider,
+            project,
+            student,
+            debug_logger=debug_logger,
+            equipment_manager=self.equipment_manager,
+            sandbox_job_manager=self.sandbox_job_manager,
+            env_store=self.env_store,
+            claude_code_manager=self.claude_code_manager,
+            external_agent_bridge=self.external_agent_bridge,
+        )
+        agent.loop.max_iterations = self.config.agent.max_iterations
+        agent.loop.bus = self.bus
+        agent.loop.agent_id = agent_id
+        agent.loop.usage_store = self.usage_store
+        if self.on_tool_call:
+            agent.loop.on_tool_call = self.on_tool_call
+
+        self.bus.subscribe(agent_id)
+        task = asyncio.create_task(agent.loop.run())
+        handle = AgentHandle(
+            agent_id=agent_id,
+            agent_type="project_student",
+            label=student.label,
+            project=project,
+            loop=agent.loop,
+            task=task,
+        )
+        task.add_done_callback(lambda t, aid=agent_id: self._on_task_done(aid, t))
+        self._handles[agent_id] = handle
         logger.info("agent {} activates", handle.agent_id)
         return handle
 
@@ -265,8 +375,9 @@ class AgentRegistry:
             except Exception as exc:
                 logger.warning("Unexpected error stopping agent {}: {}", agent_id, exc)
         handle.status = AgentStatus.DONE
-        if deactivate and handle.agent_type == "project" and handle.project is not None:
+        if deactivate and handle.agent_type == "project_manager" and handle.project is not None:
             self._mark_project_deactivated(handle.project.id)
+            await self._stop_project_students(handle.project.id)
         return True
 
     async def stop_all(self, *, deactivate: bool = False) -> None:
@@ -277,23 +388,72 @@ class AgentRegistry:
 
     async def remove_project_agent(self, project_id: str) -> bool:
         """Stop and unregister a project's agent handle, if present."""
-        agent_id = f"proj:{project_id}"
+        agent_id = project_manager_agent_id(project_id)
         handle = self._handles.get(agent_id)
         self._mark_project_deactivated(project_id)
+        await self._stop_project_students(project_id, remove_handles=True)
         if handle is None:
             return False
         await self.stop(agent_id, deactivate=False)
         self._handles.pop(agent_id, None)
         return True
 
+    async def refresh_project(
+        self,
+        project: Project,
+        *,
+        debug_logger: DebugLogger | None = None,
+    ) -> AgentHandle | None:
+        """Refresh a project's running manager/student handles after config changes."""
+        agent_id = project_manager_agent_id(project.id)
+        existing = self._handles.get(agent_id)
+        should_refresh = (
+            existing is not None and existing.status == AgentStatus.RUNNING
+        ) or project.id in self._activated_project_ids
+        if not should_refresh:
+            return None
+
+        interactive = bool(
+            existing is not None
+            and existing.loop.max_iterations == self.config.agent.max_iterations
+        )
+        await self.remove_project_agent(project.id)
+        return self.spawn_project(
+            project,
+            interactive=interactive,
+            debug_logger=debug_logger,
+        )
+
     def find_by_project_name(self, name: str) -> AgentHandle | None:
         """Find a running project agent by project name (case-insensitive)."""
         lower = name.lower()
         for h in self._handles.values():
             if (h.project and h.project.name.lower() == lower
-                    and h.status == AgentStatus.RUNNING):
+                    and h.status == AgentStatus.RUNNING
+                    and h.agent_type == "project_manager"):
                 return h
         return None
+
+    async def _stop_project_students(
+        self,
+        project_id: str,
+        *,
+        remove_handles: bool = False,
+    ) -> None:
+        student_ids = [
+            aid
+            for aid, handle in self._handles.items()
+            if handle.project is not None
+            and handle.project.id == project_id
+            and handle.agent_type == "project_student"
+        ]
+        await asyncio.gather(
+            *(self.stop(agent_id, deactivate=False) for agent_id in student_ids),
+            return_exceptions=False,
+        )
+        if remove_handles:
+            for agent_id in student_ids:
+                self._handles.pop(agent_id, None)
 
     def _on_task_done(self, agent_id: str, task: asyncio.Task[None]) -> None:
         """Update handle status when an agent's asyncio.Task completes."""

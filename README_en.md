@@ -1,5 +1,7 @@
 [**中文**](./README_zh.md) | [**English**](./README.md)
 
+Docs: [User Manual (Chinese)](./docs/USER_MANUAL.md)
+
 # DrClaw
 
 <!-- badges -->
@@ -20,7 +22,7 @@ Build your lab:
 bash <(curl -fsSL https://raw.githubusercontent.com/qzzqzzb/drclaw/main/install.sh)
 ```
 
-This installs `uv` (if needed), clones the repo to `~/.drclaw-src/`, installs all dependencies including tray support, and symlinks `drclaw` to `~/.local/bin/`. Re-running updates an existing installation.
+This installs `uv` (if needed), clones the repo to `~/.drclaw-src/`, installs core dependencies, adds macOS tray support when relevant, and symlinks `drclaw` to `~/.local/bin/`.
 
 After installing, [configure your LLM provider](#configuration) to get started.
 
@@ -184,26 +186,78 @@ More [beta features](#Beta) here.
 
 ## Configuration
 
-After install, edit `~/.drclaw/config.json` to set your LLM provider. Any [litellm-compatible](https://docs.litellm.ai/docs/providers) model string works.
+After install, edit `~/.drclaw/config.json` to set your LLM provider. The current config format is `providers + active_provider`, and any [litellm-compatible](https://docs.litellm.ai/docs/providers) model string works.
+
+For models that support configurable reasoning strength, such as some GPT-5 variants, you can set `"reasoning_effort"` on the provider as the default reasoning level. Supported values are `none`, `minimal`, `low`, `medium`, `high`, and `xhigh`, although each model may support only a subset. This is a provider-level default, not a per-query override, and it only takes effect if the underlying model/provider accepts the parameter.
+
+Example:
+
+```json
+{
+  "providers": {
+    "default": {
+      "api_key": "YOUR_OPENAI_API_KEY",
+      "model": "openai/gpt-5",
+      "reasoning_effort": "high"
+    }
+  },
+  "active_provider": "default"
+}
+```
 
 **OpenRouter:**
 ```json
 {
-  "provider": {
-    "api_key": "sk-or-v1-...",
-    "api_base": "https://openrouter.ai/api/v1",
-    "model": "openrouter/anthropic/claude-sonnet-4-5"
-  }
+  "providers": {
+    "default": {
+      "api_key": "sk-or-v1-...",
+      "api_base": "https://openrouter.ai/api/v1",
+      "model": "openrouter/anthropic/claude-sonnet-4-5"
+    }
+  },
+  "active_provider": "default"
 }
 ```
 
 **Anthropic direct:**
 ```json
 {
-  "provider": {
-    "api_key": "sk-ant-...",
-    "model": "anthropic/claude-sonnet-4-5"
-  }
+  "providers": {
+    "default": {
+      "api_key": "sk-ant-...",
+      "model": "anthropic/claude-sonnet-4-5"
+    }
+  },
+  "active_provider": "default"
+}
+```
+
+**Kimi / Moonshot:**
+```json
+{
+  "providers": {
+    "default": {
+      "api_key": "YOUR_MOONSHOT_API_KEY",
+      "api_base": "https://api.moonshot.cn/v1",
+      "model": "moonshot/kimi-k2.5"
+    }
+  },
+  "active_provider": "default"
+}
+```
+
+If you prefer the explicit OpenAI-compatible endpoint:
+
+```json
+{
+  "providers": {
+    "default": {
+      "api_key": "YOUR_MOONSHOT_API_KEY",
+      "api_base": "https://api.moonshot.cn/v1",
+      "model": "openai/kimi-k2.5"
+    }
+  },
+  "active_provider": "default"
 }
 ```
 
@@ -224,9 +278,56 @@ After install, edit `~/.drclaw/config.json` to set your LLM provider. Any [litel
 
 `web_fetch` does not require an API key.
 
+Note: if you run the above configuration inside Docker, the Web UI will not start by default because of the network restrictions. The Web frontend only accepts loopback binds and loopback peers unless Docker mode is explicitly enabled.
+
+If you knowingly want to run DrClaw locally inside Docker, add:
+
+```json
+{
+  "daemon": {
+    "web_in_docker": true
+  }
+}
+```
+
+With this enabled, the Web frontend binds to `0.0.0.0` and relaxes the peer-address check for Docker bridge traffic; `Host` and `Origin` still must be `127.0.0.1`, `::1`, or `localhost`. This is intended for local-only Docker publishing such as:
+
+```bash
+docker run -p 127.0.0.1:8080:8080 ...
+```
+
+Note: this switch only affects the Web UI. External-agent callbacks still assume same-host `127.0.0.1` reachability.
+
 ## Beta
 
 We have a list of beta features. These features integrated in the main version, but not fully tested. If you want to use them, be careful. 
+
+### Multi-Agent Per Project
+
+A single project can now run as one `project manager` plus multiple internal `student agents`.
+
+- `proj:<project_id>` remains the only project-facing manager agent and is the only project target used by the `main` assistant
+- `student:<project_id>:<student_id>` agents are internal project workers; they are currently managed by the project manager and do not accept direct `main`-assistant task routing
+- The `main` assistant can now manage student lifecycle for a project: list, create, update, enable/disable, and remove students
+- All students in the same project share `projects/<project_id>/workspace`
+- The manager and each student keep separate `MEMORY.md`, `HISTORY.md`, session history, and SOUL / config state
+- Each student also has a private state directory at `projects/<project_id>/agents/<student_id>/` for memory/history/sessions/private skills
+- Student shell execution now allows both the shared project workspace and that student's private workspace
+- The `main` assistant can now install a local-hub skill into one student's private `skills/` directory without granting it to the manager or other students
+- Student skill resolution order is now `student private skills > project workspace skills > global skills`
+- `/api/agents` and runtime agent listings now distinguish `project_manager` from `project_student`
+- In daemon `--debug` / `--debug-full` mode, student execution summaries are printed to the console and debug JSONL entries now include `agent_id`
+
+### Docker Sandbox Jobs
+
+Student agents can now use `create_job` to start a Docker-backed sandbox job for high-risk shell work.
+
+- Exposed to student / project agents only; the main assistant does not call this tool directly
+- Current implementation is `shell_task` only: the host-side manager launches a Docker container to run the command
+- Default mode is async: with `await_result=false`, the tool returns immediately with `job_id` / `request_id` while the job keeps running in the background
+- Use `get_job_status` / `list_active_jobs` to inspect progress, and `pause_job` / `resume_job` / `cancel_job` to control a live job
+- Containers exit and are cleaned up after completion; persisted state lives in the job record, workspace, and artifacts, not in a long-lived container
+- Still beta: approval flow, in-container agent workers, and stricter network / permission controls are planned next
 
 ### External Agent Protocol
 
@@ -296,6 +397,97 @@ Notes:
 - v1 assumes callback reachability on same host (`127.0.0.1`).
 - v1 callback auth is intentionally omitted for prototype use in trusted environments.
 
+### Use Codex from Project Agents via ACPX
+
+DrClaw can now let `project agents` use Codex by executing the standard `acpx` CLI through the existing `exec` / `long_exec` tools. The current implementation does **not** add a dedicated ACPX tool and does **not** turn ACPX into a provider. Instead, agents receive ACPX guidance plus a built-in skill, then run shell commands themselves.
+
+Prerequisites:
+- `acpx` is installed globally on the host
+- `acpx codex ...` already works in the host terminal
+
+#### 1. Seed the built-in ACPX skill
+
+For a fresh install:
+
+```bash
+drclaw onboard
+```
+
+For an older data directory, running `drclaw onboard` again is also fine; it will backfill missing built-in skills into `~/.drclaw/skills/`. After that you should see:
+
+```bash
+ls ~/.drclaw/skills/acpx
+```
+
+#### 2. Configure ACPX
+
+Add this to `~/.drclaw/config.json`:
+
+```json
+{
+  "acpx": {
+    "enabled": true,
+    "command": "acpx",
+    "default_agent": "codex",
+    "prefer_long_exec": true
+  }
+}
+```
+
+Meaning:
+- `enabled=true`: inject ACPX usage guidance into project agents
+- `command`: ACPX executable name to run
+- `default_agent`: currently `codex`
+- `prefer_long_exec=true`: prefer `long_exec` to avoid the normal 60-second timeout
+
+#### 3. How to test it
+
+First verify ACPX itself on the host:
+
+```bash
+acpx --help
+acpx codex exec 'Reply with exactly: acpx-ok'
+```
+
+Then create a test project and open project chat:
+
+```bash
+drclaw projects create "acpx-test"
+drclaw chat --project acpx-test
+```
+
+In the project chat, send:
+
+```text
+Do not answer directly. Use long_exec to call acpx codex exec and make it output exactly: drclaw-acpx-ok. Show me both the command and the result.
+```
+
+To test a persistent session, send:
+
+```text
+Use long_exec to run these commands:
+1. acpx codex sessions ensure --name drclaw-proj-<current-project-id>-smoke
+2. acpx codex -s drclaw-proj-<current-project-id>-smoke 'Reply with exactly: session-ok'
+3. acpx codex -s drclaw-proj-<current-project-id>-smoke status
+4. acpx codex sessions close drclaw-proj-<current-project-id>-smoke
+Return the command and result for each step.
+```
+
+Success criteria:
+- the agent explicitly calls `exec` or `long_exec`
+- it actually runs `acpx codex ...`
+- the returned answer is the real ACPX / Codex output, not a fabricated direct reply from the agent
+
+#### 4. Session naming and cleanup
+
+- `acpx codex exec ...` is one-shot and does not require session cleanup
+- persistent sessions created by project agents must use the prefix `drclaw-proj-<project-id>-`
+- persistent ACPX sessions are not closed automatically when DrClaw exits; close them explicitly when the task is done:
+
+```bash
+acpx codex sessions close drclaw-proj-<project-id>-<task-suffix>
+```
+
 ## Usage
 
 ```bash
@@ -314,8 +506,8 @@ drclaw projects create "My Research"
 drclaw status
 
 # Daemon mode
-drclaw daemon -f web
-drclaw daemon -f feishu
+drclaw daemon --debug-full -f web
+drclaw daemon --debug-full -f feishu
 
 # macOS tray
 drclaw tray
@@ -367,7 +559,7 @@ Tray config in `~/.drclaw/config.json`:
 {
   "tray": {
     "control_panel_url": "http://127.0.0.1:8080",
-    "daemon_program": ["uv","run","drclaw","daemon","-f","web"],
+    "daemon_program": ["uv","run","drclaw","daemon","--debug-full","-f","web"],
     "daemon_env": {},
     "shutdown_timeout_seconds": 8
   }
@@ -404,7 +596,7 @@ drclaw launchd uninstall
 }
 ```
 
-5. `drclaw daemon -f feishu`
+5. `drclaw daemon --debug-full -f feishu`
 6. Publish app and send a message to the bot
 
 **Troubleshooting:**

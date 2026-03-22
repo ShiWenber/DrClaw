@@ -14,7 +14,7 @@ from drclaw.agent.debug import DebugLogger
 from drclaw.agent.memory import MemoryStore
 from drclaw.bus.queue import MessageBus
 from drclaw.models.messages import InboundMessage, OutboundMessage
-from drclaw.providers.base import LLMProvider, LLMResponse
+from drclaw.providers.base import ASSISTANT_PROVIDER_FIELDS_KEY, LLMProvider, LLMResponse
 from drclaw.session.manager import Message, Session, SessionManager
 from drclaw.tools.background_tasks import BackgroundToolTaskManager
 from drclaw.tools.registry import ToolRegistry
@@ -31,7 +31,7 @@ _MAX_ITERATIONS_FINALIZE_NOTICE = (
     "If anything is incomplete, clearly state what is missing."
 )
 _CROSS_AGENT_SOURCE_HEADER_PREFIX = "[Message Source: "
-_AGENT_SOURCE_PREFIXES = ("proj:", "equip:", "claude_code:")
+_AGENT_SOURCE_PREFIXES = ("proj:", "student:", "equip:", "claude_code:")
 _AGENT_SOURCE_EXACT = {"main", "cron"}
 
 
@@ -86,6 +86,7 @@ class AgentLoop:
         self._running = False
         self._processing_lock = asyncio.Lock()
         self._current_inbound: InboundMessage | None = None
+        self._active_session: Session | None = None
         self._last_turn_had_error = False
 
     @property
@@ -149,12 +150,21 @@ class AgentLoop:
     # ------------------------------------------------------------------
 
     async def _run_agent_loop(
-        self, messages: list[dict[str, Any]]
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        on_new_messages: Callable[[list[dict[str, Any]]], None] | None = None,
     ) -> tuple[str | None, list[str], list[dict[str, Any]], bool]:
         """Run the LLM ↔ tool loop until the model stops calling tools.
 
         Returns (final_content, tools_used, messages, had_error).
+
+        *on_new_messages* is called after each iteration with the new messages
+        appended during that iteration, enabling incremental session persistence.
         """
+        debug_session_key = (
+            self._active_session.session_key if self._active_session is not None else self.session_key
+        )
         tool_defs = self.tool_registry.get_definitions() or None
         tools_used: list[str] = []
         final_content: str | None = None
@@ -162,16 +172,28 @@ class AgentLoop:
         iteration = 0
 
         while iteration < self.max_iterations:
+            mark = len(messages)
             if self.debug_logger:
-                self.debug_logger.log_request(iteration, messages, tool_defs)
+                self.debug_logger.log_request(
+                    iteration,
+                    messages,
+                    tool_defs,
+                    agent_id=self.agent_id,
+                    session_key=debug_session_key,
+                )
             response = await self.provider.complete(messages, tools=tool_defs)
             if self.debug_logger:
-                self.debug_logger.log_response(iteration, response)
+                self.debug_logger.log_response(
+                    iteration,
+                    response,
+                    agent_id=self.agent_id,
+                    session_key=debug_session_key,
+                )
             self._record_usage(response)
 
             if response.stop_reason == "error":
                 logger.error("LLM returned error stop_reason")
-                final_content = "An error occurred while processing your request."
+                final_content = response.content or "An error occurred while processing your request."
                 had_error = True
                 break
 
@@ -193,7 +215,10 @@ class AgentLoop:
                     for tc in response.tool_calls
                 ]
                 self.context_builder.add_assistant_message(
-                    messages, response.content, tool_calls=tc_dicts
+                    messages,
+                    response.content,
+                    tool_calls=tc_dicts,
+                    assistant_metadata=response.assistant_metadata,
                 )
 
                 for tc in response.tool_calls:
@@ -250,27 +275,55 @@ class AgentLoop:
                         logger.exception("Tool execution crashed: {}", tc.name)
                         result = f"Error: tool '{tc.name}' crashed unexpectedly."
                     if self.debug_logger:
-                        self.debug_logger.log_tool_exec(iteration, tc.name, tc.arguments, result)
+                        self.debug_logger.log_tool_exec(
+                            iteration,
+                            tc.name,
+                            tc.arguments,
+                            result,
+                            agent_id=self.agent_id,
+                            session_key=debug_session_key,
+                        )
                     self.context_builder.add_tool_result(messages, tc.id, tc.name, result)
                     tools_used.append(tc.name)
 
+                if on_new_messages:
+                    on_new_messages(messages[mark:])
                 iteration += 1
                 continue
 
             # No tool calls — model is done
-            self.context_builder.add_assistant_message(messages, response.content)
+            mark = len(messages)
+            self.context_builder.add_assistant_message(
+                messages,
+                response.content,
+                assistant_metadata=response.assistant_metadata,
+            )
             final_content = response.content
+            if on_new_messages:
+                on_new_messages(messages[mark:])
             break
 
         if iteration >= self.max_iterations and final_content is None:
+            mark = len(messages)
             messages.append({"role": "system", "content": _MAX_ITERATIONS_FINALIZE_NOTICE})
             if self.debug_logger:
-                self.debug_logger.log_request(iteration, messages, None)
+                self.debug_logger.log_request(
+                    iteration,
+                    messages,
+                    None,
+                    agent_id=self.agent_id,
+                    session_key=debug_session_key,
+                )
 
             final_response = await self.provider.complete(messages, tools=None)
 
             if self.debug_logger:
-                self.debug_logger.log_response(iteration, final_response)
+                self.debug_logger.log_response(
+                    iteration,
+                    final_response,
+                    agent_id=self.agent_id,
+                    session_key=debug_session_key,
+                )
             self._record_usage(final_response)
 
             if final_response.stop_reason == "error":
@@ -292,6 +345,8 @@ class AgentLoop:
                 )
 
             self.context_builder.add_assistant_message(messages, final_content)
+            if on_new_messages:
+                on_new_messages(messages[mark:])
 
         return final_content, tools_used, messages, had_error
 
@@ -368,45 +423,54 @@ class AgentLoop:
         serialize externally (see ``_dispatch``).
         """
         session = self.session_manager.load(session_key)
-        history_raw = cast(list[dict[str, Any]], session.get_history(max_messages=self.max_history))
-        history = self._sanitize_history_for_model(history_raw)
-        messages = self.context_builder.build_messages(
-            history,
-            content,
-            channel,
-            chat_id,
-            runtime_metadata=runtime_metadata,
-        )
-        skip = len(messages)
+        self._active_session = session
+        try:
+            history_raw = cast(list[dict[str, Any]], session.get_history(max_messages=self.max_history))
+            history = self._sanitize_history_for_model(history_raw)
+            messages = self.context_builder.build_messages(
+                history,
+                content,
+                channel,
+                chat_id,
+                runtime_metadata=runtime_metadata,
+            )
+            skip = len(messages)
 
-        # The user message lives inside `messages` (at skip-1) but that
-        # region is excluded from _save_turn by the skip offset.  Append
-        # it to the session explicitly so it persists across turns.
-        source_text = source.strip() if isinstance(source, str) else "user"
-        if not source_text:
-            source_text = "user"
-        user_message: dict[str, Any] = {"role": "user", "content": content, "source": source_text}
-        attachments = self._runtime_attachments(runtime_metadata)
-        if attachments:
-            user_message["attachments"] = attachments
-        session.messages.append(cast(Message, user_message))
+            # The user message lives inside `messages` (at skip-1) but that
+            # region is excluded from _save_turn by the skip offset.  Append
+            # it to the session explicitly so it persists across turns.
+            source_text = source.strip() if isinstance(source, str) else "user"
+            if not source_text:
+                source_text = "user"
+            user_message: dict[str, Any] = {"role": "user", "content": content, "source": source_text}
+            attachments = self._runtime_attachments(runtime_metadata)
+            if attachments:
+                user_message["attachments"] = attachments
+            session.messages.append(cast(Message, user_message))
+            self.session_manager.save(session)
 
-        self._last_turn_had_error = False
-        final_content, _tools_used, all_msgs, had_error = await self._run_agent_loop(messages)
-        self._last_turn_had_error = had_error
+            def _persist_incremental(new_msgs: list[dict[str, Any]]) -> None:
+                """Incrementally persist new messages from the agent loop."""
+                self._save_turn(
+                    session,
+                    new_msgs,
+                    0,
+                    inbound_source=source_text,
+                    agent_source=self.agent_id,
+                )
+                self.session_manager.save(session)
 
-        self._save_turn(
-            session,
-            all_msgs,
-            skip,
-            inbound_source=source_text,
-            agent_source=self.agent_id,
-        )
-        self.session_manager.save(session)
+            self._last_turn_had_error = False
+            final_content, _tools_used, all_msgs, had_error = await self._run_agent_loop(
+                messages, on_new_messages=_persist_incremental,
+            )
+            self._last_turn_had_error = had_error
 
-        await self._maybe_consolidate(session)
+            await self._maybe_consolidate(session)
 
-        return final_content or ""
+            return final_content or ""
+        finally:
+            self._active_session = None
 
     @staticmethod
     def _is_agent_source(source: str) -> bool:
@@ -438,6 +502,10 @@ class AgentLoop:
                         cleaned["content"] = f"{header}\n{content}"
             if role == "assistant" and "tool_calls" in msg:
                 cleaned["tool_calls"] = msg.get("tool_calls")
+            if role == "assistant":
+                provider_fields = msg.get(ASSISTANT_PROVIDER_FIELDS_KEY)
+                if isinstance(provider_fields, dict) and provider_fields:
+                    cleaned[ASSISTANT_PROVIDER_FIELDS_KEY] = dict(provider_fields)
             if role == "tool":
                 if "tool_call_id" in msg:
                     cleaned["tool_call_id"] = msg.get("tool_call_id")

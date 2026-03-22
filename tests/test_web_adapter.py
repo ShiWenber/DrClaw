@@ -9,7 +9,14 @@ import pytest
 
 from drclaw.config.schema import DrClawConfig
 from drclaw.daemon.frontend import FrontendAdapter
-from drclaw.frontends.web.adapter import WebAdapter
+from drclaw.frontends.web.adapter import (
+    WebAdapter,
+    _docker_mode_enabled,
+    _is_allowed_origin,
+    _is_allowed_peer,
+    _is_loopback_host,
+    _is_loopback_peer,
+)
 from drclaw.models.messages import InboundMessage, OutboundMessage
 
 # -- Protocol compliance -------------------------------------------------------
@@ -22,6 +29,70 @@ def test_web_adapter_implements_frontend_protocol():
 
 def test_adapter_id():
     assert WebAdapter.adapter_id == "web"
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1"])
+def test_web_adapter_accepts_loopback_bind_hosts(host: str):
+    assert WebAdapter(host=host).host == host
+
+
+def test_web_adapter_rejects_non_loopback_bind_host():
+    with pytest.raises(ValueError, match="loopback"):
+        WebAdapter(host="0.0.0.0")
+
+
+def test_web_adapter_uses_docker_bind_host_when_enabled():
+    adapter = WebAdapter(docker_mode=True)
+    assert adapter.bind_host == "0.0.0.0"
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1", "[::1]"])
+def test_is_loopback_host_accepts_local_values(host: str):
+    assert _is_loopback_host(host) is True
+
+
+@pytest.mark.parametrize("host", ["192.168.1.10", "example.com", ""])
+def test_is_loopback_host_rejects_remote_values(host: str):
+    assert _is_loopback_host(host) is False
+
+
+@pytest.mark.parametrize("peer", ["127.0.0.1", "::1", None])
+def test_is_loopback_peer(peer: str | None):
+    assert _is_loopback_peer(peer) is (peer is not None)
+
+
+@pytest.mark.parametrize(
+    ("peer", "docker_mode", "expected"),
+    [
+        ("127.0.0.1", False, True),
+        ("192.168.1.10", False, False),
+        ("192.168.1.10", True, True),
+        (None, True, False),
+    ],
+)
+def test_is_allowed_peer(peer: str | None, docker_mode: bool, expected: bool):
+    assert _is_allowed_peer(peer, docker_mode=docker_mode) is expected
+
+
+def test_docker_mode_enabled_reads_adapter_flag():
+    request = MagicMock()
+    request.app = {"adapter": WebAdapter(docker_mode=True)}
+    assert _docker_mode_enabled(request) is True
+
+
+@pytest.mark.parametrize(
+    ("origin", "expected"),
+    [
+        ("http://127.0.0.1:5173", True),
+        ("https://localhost:8080", True),
+        ("tauri://localhost", True),
+        ("http://192.168.1.10:8080", False),
+        ("https://example.com", False),
+        ("null", False),
+    ],
+)
+def test_allowed_origin_is_loopback_only(origin: str, expected: bool):
+    assert _is_allowed_origin(origin) is expected
 
 
 # -- drain_outbound filtering -------------------------------------------------

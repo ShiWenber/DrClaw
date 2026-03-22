@@ -5,12 +5,16 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock
 
-from drclaw.models.project import JsonProjectStore, Project
+from drclaw.models.project import JsonProjectStore, Project, StudentAgentConfig
 from drclaw.tools.project_tools import (
+    CreateProjectStudentTool,
     CreateProjectTool,
     ListProjectsTool,
+    ListProjectStudentsTool,
     RemoveProjectTool,
+    RemoveProjectStudentTool,
     RouteToProjectTool,
+    UpdateProjectStudentTool,
 )
 
 # ---------------------------------------------------------------------------
@@ -107,6 +111,25 @@ class TestCreateProjectTool:
         assert "Minimal" in result
         assert len(store.list_projects()) == 1
 
+    async def test_create_project_appends_to_soul(self, tmp_path: Path) -> None:
+        store = JsonProjectStore(tmp_path)
+        tool = CreateProjectTool(store, projects_dir=tmp_path / "projects")
+
+        result = await tool.execute(
+            {
+                "name": "PersonaTest",
+                "soul_append": "## Project Overrides\n- Use concise bullet points.",
+            }
+        )
+
+        assert "PersonaTest" in result
+        projects = store.list_projects()
+        assert len(projects) == 1
+        soul_file = tmp_path / "projects" / projects[0].id / "workspace" / "SOUL.md"
+        content = soul_file.read_text(encoding="utf-8")
+        assert "## Project Overrides" in content
+        assert "Use concise bullet points." in content
+
     async def test_create_project_duplicate_name_returns_error(self, tmp_path: Path) -> None:
         store = JsonProjectStore(tmp_path)
         store.create_project("Dupe")
@@ -179,6 +202,127 @@ class TestListProjectsTool:
         result = await tool.execute({})
 
         assert "No projects" in result
+
+
+# ---------------------------------------------------------------------------
+# Student management tools
+# ---------------------------------------------------------------------------
+
+
+class TestProjectStudentTools:
+    async def test_list_project_students(self, tmp_path: Path) -> None:
+        store = JsonProjectStore(tmp_path)
+        project = store.create_project("Alpha")
+        project.student_agents = [StudentAgentConfig(id="researcher", label="Researcher")]
+        store.update_project(project)
+
+        tool = ListProjectStudentsTool(store)
+        result = await tool.execute({"project_id": project.id})
+
+        assert "researcher" in result
+        assert "Researcher" in result
+
+    async def test_create_project_student_creates_state_dirs(self, tmp_path: Path) -> None:
+        store = JsonProjectStore(tmp_path)
+        project = store.create_project("Alpha")
+        on_update = AsyncMock(return_value=None)
+
+        tool = CreateProjectStudentTool(
+            store,
+            projects_dir=tmp_path / "projects",
+            on_update=on_update,
+        )
+        result = await tool.execute(
+            {
+                "project_id": project.id,
+                "id": "researcher",
+                "label": "Researcher",
+                "soul": "# Role\n- Focus on research.",
+            }
+        )
+
+        assert "Created student" in result
+        updated = store.get_project(project.id)
+        assert updated is not None
+        assert [student.id for student in updated.student_agents] == ["researcher"]
+        assert (tmp_path / "projects" / project.id / "agents" / "researcher" / "skills").is_dir()
+        on_update.assert_awaited_once()
+
+    async def test_create_project_student_rejects_duplicate_id(self, tmp_path: Path) -> None:
+        store = JsonProjectStore(tmp_path)
+        project = store.create_project("Alpha")
+        project.student_agents = [StudentAgentConfig(id="researcher", label="Researcher")]
+        store.update_project(project)
+
+        tool = CreateProjectStudentTool(store, projects_dir=tmp_path / "projects")
+        result = await tool.execute({"project_id": project.id, "id": "researcher"})
+
+        assert result.startswith("Error:")
+
+    async def test_update_project_student_mutates_supported_fields(self, tmp_path: Path) -> None:
+        store = JsonProjectStore(tmp_path)
+        project = store.create_project("Alpha")
+        project.student_agents = [StudentAgentConfig(id="researcher", label="Researcher")]
+        store.update_project(project)
+        on_update = AsyncMock(return_value=None)
+
+        tool = UpdateProjectStudentTool(store, on_update=on_update)
+        result = await tool.execute(
+            {
+                "project_id": project.id,
+                "student_id": "researcher",
+                "label": "Lead Researcher",
+                "enabled": False,
+                "soul": "# Updated",
+            }
+        )
+
+        assert "Updated student" in result
+        updated = store.get_project(project.id)
+        assert updated is not None
+        student = updated.student_agents[0]
+        assert student.label == "Lead Researcher"
+        assert student.enabled is False
+        assert student.soul == "# Updated"
+        on_update.assert_awaited_once()
+
+    async def test_update_project_student_rejects_id_rename(self, tmp_path: Path) -> None:
+        store = JsonProjectStore(tmp_path)
+        project = store.create_project("Alpha")
+        project.student_agents = [StudentAgentConfig(id="researcher", label="Researcher")]
+        store.update_project(project)
+
+        tool = UpdateProjectStudentTool(store)
+        result = await tool.execute(
+            {
+                "project_id": project.id,
+                "student_id": "researcher",
+                "id": "renamed",
+            }
+        )
+
+        assert result.startswith("Error:")
+        assert "immutable" in result
+
+    async def test_remove_project_student_preserves_state_dir(self, tmp_path: Path) -> None:
+        store = JsonProjectStore(tmp_path)
+        project = store.create_project("Alpha")
+        project.student_agents = [StudentAgentConfig(id="researcher", label="Researcher")]
+        store.update_project(project)
+        student_dir = tmp_path / "projects" / project.id / "agents" / "researcher"
+        student_dir.mkdir(parents=True, exist_ok=True)
+        (student_dir / "MEMORY.md").write_text("keep", encoding="utf-8")
+        on_update = AsyncMock(return_value=None)
+
+        tool = RemoveProjectStudentTool(store, on_update=on_update)
+        result = await tool.execute({"project_id": project.id, "student_id": "researcher"})
+
+        assert "Removed student" in result
+        updated = store.get_project(project.id)
+        assert updated is not None
+        assert updated.student_agents == []
+        assert (student_dir / "MEMORY.md").read_text(encoding="utf-8") == "keep"
+        on_update.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------

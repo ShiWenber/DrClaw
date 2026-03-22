@@ -18,7 +18,7 @@ from drclaw.bus.queue import MessageBus
 from drclaw.config.loader import load_config
 from drclaw.config.schema import DrClawConfig
 from drclaw.equipment.models import EquipmentPrototype
-from drclaw.frontends.web.adapter import WebAdapter
+from drclaw.frontends.web.adapter import WebAdapter, _cors_middleware, _local_only_middleware
 from drclaw.frontends.web.routes import (
     _normalize_avatar_for_web,
     handle_activate_agent,
@@ -42,7 +42,7 @@ from drclaw.frontends.web.routes import (
     handle_upload_skill,
     handle_ws,
 )
-from drclaw.models.project import Project
+from drclaw.models.project import Project, StudentAgentConfig
 from drclaw.session.manager import SessionManager
 
 
@@ -71,7 +71,7 @@ def _make_mock_kernel(tmp_path):
 
 
 def _make_app(kernel, adapter):
-    app = web.Application()
+    app = web.Application(middlewares=[_local_only_middleware, _cors_middleware])
     app["kernel"] = kernel
     app["adapter"] = adapter
     app["config_path"] = kernel.config.data_path / "config.json"
@@ -133,6 +133,7 @@ async def test_index_returns_html(kernel, adapter):
         assert 'data-route="#/monitor"' not in text
         assert 'id="team-workspace"' in text
         assert 'id="team-chat-panel"' in text
+        assert 'id="team-chat-resizer"' in text
         assert 'id="floating-chat-publish"' in text
         assert 'id="add-agent-btn"' in text
         assert 'id="add-agent-from-scratch"' in text
@@ -162,6 +163,41 @@ async def test_asset_route_supports_nested_paths(kernel, adapter, tmp_path):
         assert "no-store" in resp.headers.get("Cache-Control", "")
 
 
+@pytest.mark.asyncio
+async def test_rejects_non_loopback_host_header(kernel, adapter):
+    app = _make_app(kernel, adapter)
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.get("/", headers={"Host": "example.com"})
+        assert resp.status == 403
+        body = await resp.json()
+        assert "Localhost" in body["error"]
+
+
+@pytest.mark.asyncio
+async def test_options_allows_loopback_origin(kernel, adapter):
+    app = _make_app(kernel, adapter)
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.options(
+            "/api/agents",
+            headers={"Origin": "http://127.0.0.1:5173"},
+        )
+        assert resp.status == 204
+        assert resp.headers["Access-Control-Allow-Origin"] == "http://127.0.0.1:5173"
+
+
+@pytest.mark.asyncio
+async def test_options_rejects_remote_origin(kernel, adapter):
+    app = _make_app(kernel, adapter)
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.options(
+            "/api/agents",
+            headers={"Origin": "https://example.com"},
+        )
+        assert resp.status == 403
+        body = await resp.json()
+        assert "Origin not allowed" in body["error"]
+
+
 # -- POST/GET /api/chat/files --------------------------------------------------
 
 
@@ -188,6 +224,27 @@ async def test_chat_file_upload_and_download(kernel, adapter):
         download = await client.get(uploaded["download_url"])
         assert download.status == 200
         assert await download.read() == b"hello attachment"
+
+
+@pytest.mark.asyncio
+async def test_chat_file_upload_accepts_docx(kernel, adapter):
+    app = _make_app(kernel, adapter)
+    async with TestClient(TestServer(app)) as client:
+        form = FormData()
+        form.add_field(
+            "files",
+            b"fake docx bytes",
+            filename="draft.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        upload = await client.post("/api/chat/files/upload", data=form)
+        assert upload.status == 201
+        body = await upload.json()
+        assert isinstance(body.get("files"), list)
+        assert len(body["files"]) == 1
+        uploaded = body["files"][0]
+        assert uploaded["name"] == "draft.docx"
+        assert uploaded["download_url"].startswith("/api/chat/files/")
 
 
 @pytest.mark.asyncio
@@ -224,6 +281,7 @@ async def test_agents_endpoint(kernel, adapter):
         assert data[0]["role"] == "Main orchestrator agent"
         assert data[0]["type"] == "assistant"
         assert data[0]["status"] == "idle"
+        assert data[0]["project_id"] is None
 
 
 @pytest.mark.asyncio
@@ -255,7 +313,7 @@ async def test_agents_endpoint_zh_locale_uses_display_name(kernel, adapter):
         assert main["display_role"] == "主控协调智能体"
         assert idle["name"] == "Template Project"
         assert idle["display_name"] == "猫咪智能体"
-        assert idle["display_role"] == "项目执行智能体"
+        assert idle["display_role"] == "项目管理智能体"
 
 
 @pytest.mark.asyncio
@@ -279,8 +337,32 @@ async def test_agents_endpoint_includes_idle_projects(kernel, adapter):
         assert f"proj:{project.id}" in ids
         idle = next(a for a in data if a["id"] == f"proj:{project.id}")
         assert idle["status"] == "idle"
-        assert idle["type"] == "student"
+        assert idle["type"] == "project_manager"
         assert idle["label"] == "Dormant Project"
+        assert idle["project_id"] == project.id
+
+
+@pytest.mark.asyncio
+async def test_agents_endpoint_includes_project_students(kernel, adapter):
+    now = datetime.now(tz=timezone.utc)
+    project = Project(
+        id="demo-proj-students",
+        name="Student Project",
+        created_at=now,
+        updated_at=now,
+        student_agents=[StudentAgentConfig(id="researcher", label="Researcher")],
+    )
+    kernel.project_store.list_projects.return_value = [project]
+
+    app = _make_app(kernel, adapter)
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.get("/api/agents")
+        assert resp.status == 200
+        data = await resp.json()
+        student = next(a for a in data if a["id"] == f"student:{project.id}:researcher")
+        assert student["type"] == "project_student"
+        assert student["chat_enabled"] is False
+        assert student["project_id"] == project.id
 
 
 @pytest.mark.asyncio
@@ -477,6 +559,52 @@ async def test_agent_history_includes_user_attachments(kernel, adapter):
         assert isinstance(msg.get("files"), list)
         assert msg["files"][0]["name"] == "note.txt"
         assert msg["files"][0]["download_url"].startswith("/api/chat/files/")
+
+
+@pytest.mark.asyncio
+async def test_agent_history_legacy_attachment_path_gets_download_url(kernel, adapter):
+    image_path = kernel.config.data_path / "projects" / "demo" / "workspace" / "history.png"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image_path.write_bytes(
+        bytes.fromhex(
+            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+            "0000000d49444154789c6360606060000000050001a5f645400000000049454e44ae426082"
+        )
+    )
+
+    manager = SessionManager(kernel.config.data_path / "sessions")
+    session = manager.load("main")
+    session.messages = [
+        {
+            "role": "user",
+            "content": "",
+            "source": "user",
+            "attachments": [
+                {
+                    "name": "history.png",
+                    "mime": "image/png",
+                    "size": image_path.stat().st_size,
+                    "path": str(image_path),
+                }
+            ],
+        }
+    ]
+    manager.save(session)
+
+    app = _make_app(kernel, adapter)
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.get("/api/agents/main/history")
+        assert resp.status == 200
+        body = await resp.json()
+        assert len(body["messages"]) == 1
+        msg = body["messages"][0]
+        assert isinstance(msg.get("files"), list)
+        assert msg["files"][0]["name"] == "history.png"
+        assert msg["files"][0]["download_url"].startswith("/api/chat/files/")
+
+        download = await client.get(msg["files"][0]["download_url"])
+        assert download.status == 200
+        assert download.headers["Content-Type"] == "image/png"
 
 
 @pytest.mark.asyncio
@@ -1071,38 +1199,55 @@ async def test_publish_to_hub_endpoint_requires_active_project(kernel, adapter):
 
 @pytest.mark.asyncio
 async def test_config_get_endpoint(kernel, adapter):
+    kernel.config.providers[kernel.config.active_provider].reasoning_effort = "medium"
     app = _make_app(kernel, adapter)
     async with TestClient(TestServer(app)) as client:
         resp = await client.get("/api/config")
         assert resp.status == 200
         data = await resp.json()
-        assert data["provider"]["model"] == kernel.config.provider.model
+        assert data["providers"][kernel.config.active_provider]["model"] == (
+            kernel.config.active_provider_config.model
+        )
+        assert data["active_provider"] == kernel.config.active_provider
+        assert data["providers"][kernel.config.active_provider]["reasoning_effort"] == "medium"
         assert data["agent"]["max_iterations"] == kernel.config.agent.max_iterations
+        assert data["daemon"]["web_in_docker"] is False
 
 
 @pytest.mark.asyncio
 async def test_config_put_endpoint_persists(kernel, adapter):
     app = _make_app(kernel, adapter)
     payload = kernel.config.model_dump(by_alias=True)
-    payload["provider"]["model"] = "openai/gpt-4.1-mini"
+    payload["providers"][payload["active_provider"]]["model"] = "openai/gpt-4.1-mini"
+    payload["providers"][payload["active_provider"]]["reasoning_effort"] = "high"
     payload["daemon"]["verbose_chat"] = False
     payload["daemon"]["show_tool_calls"] = False
+    payload["daemon"]["web_in_docker"] = True
 
     async with TestClient(TestServer(app)) as client:
         resp = await client.put("/api/config", json=payload)
         assert resp.status == 200
         data = await resp.json()
         assert data["restart_required"] is True
-        assert data["config"]["provider"]["model"] == "openai/gpt-4.1-mini"
-        assert kernel.config.provider.model == "openai/gpt-4.1-mini"
+        assert data["config"]["providers"][data["config"]["active_provider"]]["model"] == (
+            "openai/gpt-4.1-mini"
+        )
+        assert data["config"]["providers"][data["config"]["active_provider"]]["reasoning_effort"] == (
+            "high"
+        )
+        assert kernel.config.active_provider_config.model == "openai/gpt-4.1-mini"
+        assert kernel.config.active_provider_config.reasoning_effort == "high"
         assert kernel.config.daemon.verbose_chat is False
         assert kernel.config.daemon.show_tool_calls is False
+        assert kernel.config.daemon.web_in_docker is True
 
     config_path = kernel.config.data_path / "config.json"
     loaded = load_config(config_path)
-    assert loaded.provider.model == "openai/gpt-4.1-mini"
+    assert loaded.active_provider_config.model == "openai/gpt-4.1-mini"
+    assert loaded.active_provider_config.reasoning_effort == "high"
     assert loaded.daemon.verbose_chat is False
     assert loaded.daemon.show_tool_calls is False
+    assert loaded.daemon.web_in_docker is True
 
 
 @pytest.mark.asyncio
@@ -1624,6 +1769,48 @@ async def test_ws_chat_publishes_inbound(kernel, adapter):
         assert msg.channel == "web"
         assert msg.text == "hello"
         assert msg.metadata.get("webui_language") == "zh"
+
+        await ws.close()
+
+
+@pytest.mark.asyncio
+async def test_ws_chat_to_main_includes_active_agents_metadata(kernel, adapter):
+    now = datetime.now(tz=timezone.utc)
+    main_handle = kernel.registry.get.return_value
+    project = Project(
+        id="demo-proj-active-list",
+        name="Cat",
+        created_at=now,
+        updated_at=now,
+    )
+    project_handle = MagicMock(spec=AgentHandle)
+    project_handle.agent_id = f"proj:{project.id}"
+    project_handle.label = project.name
+    project_handle.agent_type = "project"
+    project_handle.project = project
+    project_handle.status = AgentStatus.RUNNING
+    kernel.registry.list_agents.return_value = [main_handle, project_handle]
+
+    app = _make_app(kernel, adapter)
+    async with TestClient(TestServer(app)) as client:
+        ws = await client.ws_connect("/ws")
+
+        await ws.send_json({
+            "type": "chat",
+            "agent_id": "main",
+            "text": "hello",
+        })
+
+        msg = await kernel.bus.consume_inbound("main")
+        active_agents = msg.metadata.get("active_agents")
+        assert isinstance(active_agents, list)
+        assert active_agents == [
+            {
+                "id": f"proj:{project.id}",
+                "name": project.name,
+                "role": "project",
+            }
+        ]
 
         await ws.close()
 

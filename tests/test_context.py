@@ -10,6 +10,7 @@ import pytest
 from drclaw.agent.context import ContextBuilder
 from drclaw.agent.memory import MemoryStore
 from drclaw.agent.skills import SkillsLoader
+from drclaw.providers.base import ASSISTANT_PROVIDER_FIELDS_KEY
 
 IDENTITY = "You are DrClaw, a research project manager."
 
@@ -43,6 +44,9 @@ def test_callable_identity_text() -> None:
 def test_build_system_prompt_no_memory(builder: ContextBuilder) -> None:
     prompt = builder.build_system_prompt()
     assert IDENTITY in prompt
+    assert "# Global Operating Policy" in prompt
+    assert "default to uv" in prompt
+    assert "seek help from the user or caller" in prompt
     assert "Memory" not in prompt
 
 
@@ -137,6 +141,22 @@ def test_runtime_context_ignores_invalid_webui_language_hint() -> None:
     assert "WebUI Preferred Response Language" not in ctx
 
 
+def test_runtime_context_includes_active_agents() -> None:
+    ctx = ContextBuilder._build_runtime_context(
+        "web",
+        "chat-1",
+        {
+            "active_agents": [
+                {"id": "proj:cat-1", "name": "Cat", "role": "project"},
+                {"id": "equip:web", "name": "Web Search", "role": "equipment"},
+            ]
+        },
+    )
+    assert "Active Agents:" in ctx
+    assert "Cat | id=proj:cat-1 | role=project" in ctx
+    assert "Web Search | id=equip:web | role=equipment" in ctx
+
+
 # ---------------------------------------------------------------------------
 # add_assistant_message
 # ---------------------------------------------------------------------------
@@ -155,6 +175,17 @@ def test_add_assistant_message_with_tool_calls(builder: ContextBuilder) -> None:
     msgs: list[dict[str, Any]] = []
     builder.add_assistant_message(msgs, None, tool_calls=tool_calls)
     assert msgs[0]["tool_calls"] == tool_calls
+
+
+def test_add_assistant_message_with_provider_metadata(builder: ContextBuilder) -> None:
+    msgs: list[dict[str, Any]] = []
+    builder.add_assistant_message(
+        msgs,
+        None,
+        tool_calls=[],
+        assistant_metadata={"reasoning_content": "step by step"},
+    )
+    assert msgs[0][ASSISTANT_PROVIDER_FIELDS_KEY] == {"reasoning_content": "step by step"}
 
 
 # ---------------------------------------------------------------------------
@@ -319,9 +350,10 @@ def test_section_ordering(tmp_path: Path) -> None:
     prompt = cb.build_system_prompt()
 
     i_identity = prompt.index(IDENTITY)
+    i_policy = prompt.index("# Global Operating Policy")
     i_memory = prompt.index("# Memory")
     i_project_notes = prompt.index("# Project Notes")
     i_active = prompt.index("# Active Skills")
     i_skills = prompt.index("# Skills")
 
-    assert i_identity < i_memory < i_project_notes < i_active < i_skills
+    assert i_identity < i_policy < i_memory < i_project_notes < i_active < i_skills
