@@ -1,0 +1,55 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.egg-info
+.eggs
+dist
+build
+*.egg
+.venv
+.uv
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+.tox
+
+# Documentation
+*.md
+!README.md
+docs
+LICENSE
+
+# Development files
+Makefile
+docker-compose.override.yml
+*.env
+.env.local
+
+# Node (if any)
+node_modules
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific (large files)
+assets/images
+assets/videos
+*.log
+
+# Keep uv.lock in build context because Dockerfile installs with it.
+!uv.lock

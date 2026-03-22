@@ -1,0 +1,80 @@
+# DrClaw Docker Compose Configuration
+# 
+# Services:
+#   - drclaw: Main daemon service (kernel + web frontend + feishu bot)
+#
+# Ports:
+#   - 8081: Web UI (configurable via DRCLAW_WEB_PORT)
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f
+#   docker compose down
+#
+# Environment Variables:
+#   DRCLAW_PROVIDER_API_KEY        - API key for LLM provider
+#   DRCLAW_PROVIDER_API_BASE       - Optional API base URL
+#   DRCLAW_PROVIDER_MODEL          - Model name (default: anthropic/claude-sonnet-4-5)
+#   DRCLAW_FEISHU_APP_ID           - Feishu app ID
+#   DRCLAW_FEISHU_APP_SECRET       - Feishu app secret
+#   DRCLAW_FEISHU_ENCRYPT_KEY     - Feishu encrypt key
+#   DRCLAW_FEISHU_VERIFICATION_TOKEN - Feishu verification token
+#   DRCLAW_WEB_PORT                - Web UI port (default: 8081)
+#   DRCLAW_WEB_HOST                - Web UI host (default: 0.0.0.0)
+
+services:
+  drclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${DRCLAW_PYTHON_BASE_IMAGE:-python:3.10-slim-bookworm}
+    container_name: drclaw
+    restart: unless-stopped
+    ports:
+      - "${DRCLAW_WEB_PORT:-8081}:${DRCLAW_WEB_PORT:-8081}"
+    environment:
+      # Provider configuration
+      - DRCLAW_PROVIDER_API_KEY=${DRCLAW_PROVIDER_API_KEY:-}
+      - DRCLAW_PROVIDER_API_BASE=${DRCLAW_PROVIDER_API_BASE:-}
+      - DRCLAW_PROVIDER_MODEL=${DRCLAW_PROVIDER_MODEL:-anthropic/claude-sonnet-4-5}
+      
+      # Daemon configuration
+      - DRCLAW_DAEMON_FRONTENDS=web,feishu
+      - DRCLAW_DAEMON_VERBOSE_CHAT=true
+      - DRCLAW_DAEMON_SHOW_TOOL_CALLS=true
+      
+      # Feishu configuration (fill in your values)
+      - DRCLAW_FEISHU_APP_ID=${DRCLAW_FEISHU_APP_ID:-}
+      - DRCLAW_FEISHU_APP_SECRET=${DRCLAW_FEISHU_APP_SECRET:-}
+      - DRCLAW_FEISHU_ENCRYPT_KEY=${DRCLAW_FEISHU_ENCRYPT_KEY:-}
+      - DRCLAW_FEISHU_VERIFICATION_TOKEN=${DRCLAW_FEISHU_VERIFICATION_TOKEN:-}
+      
+      # Web adapter configuration
+      - DRCLAW_WEB_HOST=0.0.0.0
+      - DRCLAW_WEB_PORT=8081
+      
+      # Data directory
+      - DRCLAW_DATA_DIR=/data
+      
+      # Python environment
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Persist configuration and data
+      - drclaw_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - drclaw_network
+
+volumes:
+  drclaw_data:
+    name: drclaw_data
+
+networks:
+  drclaw_network:
+    driver: bridge
