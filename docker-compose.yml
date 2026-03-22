@@ -60,8 +60,8 @@ services:
       # Python environment
       - PYTHONUNBUFFERED=1
     volumes:
-      # Persist configuration and data
-      - drclaw_data:/data
+      # Persist configuration and data (mount to home directory)
+      - drclaw_config:/home/drclaw
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/"]
       interval: 30s
@@ -72,8 +72,8 @@ services:
       - drclaw_network
 
 volumes:
-  drclaw_data:
-    name: drclaw_data
+  drclaw_config:
+    name: drclaw_config
 
 networks:
   drclaw_network:

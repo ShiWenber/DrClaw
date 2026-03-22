@@ -2,7 +2,6 @@
 set -e
 
 # DrClaw reads config from ~/.drclaw/config.json (hardcoded in get_data_dir())
-# We must write to the correct location
 DRCLAW_HOME="/home/drclaw"
 CONFIG_DIR="$DRCLAW_HOME/.drclaw"
 CONFIG_FILE="$CONFIG_DIR/config.json"
@@ -17,13 +16,15 @@ mkdir -p "$CONFIG_DIR"
 mkdir -p "$DATA_DIR"
 chown -R drclaw:drclaw "$DRCLAW_HOME" 2>/dev/null || true
 
-# Generate config file
-cat > "$CONFIG_FILE" << EOF
+# Only create default config if it doesn't exist
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Config file not found, creating default config at $CONFIG_FILE"
+    cat > "$CONFIG_FILE" << EOF
 {
   "provider": {
-    "api_key": "${DRCLAW_PROVIDER_API_KEY:-}",
-    "api_base": "${DRCLAW_PROVIDER_API_BASE:-}",
-    "model": "${DRCLAW_PROVIDER_MODEL:-anthropic/claude-sonnet-4-5}"
+    "api_key": "",
+    "api_base": "",
+    "model": "anthropic/claude-sonnet-4-5"
   },
   "daemon": {
     "frontends": ["web"],
@@ -32,18 +33,50 @@ cat > "$CONFIG_FILE" << EOF
     "web_in_docker": true
   },
   "feishu": {
-    "app_id": "${DRCLAW_FEISHU_APP_ID:-}",
-    "app_secret": "${DRCLAW_FEISHU_APP_SECRET:-}",
-    "encrypt_key": "${DRCLAW_FEISHU_ENCRYPT_KEY:-}",
-    "verification_token": "${DRCLAW_FEISHU_VERIFICATION_TOKEN:-}"
+    "app_id": "",
+    "app_secret": "",
+    "encrypt_key": "",
+    "verification_token": ""
   },
   "data_dir": "$DATA_DIR"
 }
 EOF
+    chown drclaw:drclaw "$CONFIG_FILE" 2>/dev/null || true
+else
+    echo "Config file already exists at $CONFIG_FILE, preserving existing configuration"
+fi
 
-chown drclaw:drclaw "$CONFIG_FILE" 2>/dev/null || true
+# Update config with environment variables if provided
+# Use jq to merge environment variables into existing config
+if command -v jq &> /dev/null; then
+    # Update provider settings if environment variables are set
+    [ -n "$DRCLAW_PROVIDER_API_KEY" ] && \
+        jq --arg v "$DRCLAW_PROVIDER_API_KEY" '.provider.api_key = $v' "$CONFIG_FILE" > /tmp/config.json && mv /tmp/config.json "$CONFIG_FILE"
+    
+    [ -n "$DRCLAW_PROVIDER_API_BASE" ] && \
+        jq --arg v "$DRCLAW_PROVIDER_API_BASE" '.provider.api_base = $v' "$CONFIG_FILE" > /tmp/config.json && mv /tmp/config.json "$CONFIG_FILE"
+    
+    [ -n "$DRCLAW_PROVIDER_MODEL" ] && \
+        jq --arg v "$DRCLAW_PROVIDER_MODEL" '.provider.model = $v' "$CONFIG_FILE" > /tmp/config.json && mv /tmp/config.json "$CONFIG_FILE"
+    
+    # Update feishu settings if environment variables are set
+    [ -n "$DRCLAW_FEISHU_APP_ID" ] && \
+        jq --arg v "$DRCLAW_FEISHU_APP_ID" '.feishu.app_id = $v' "$CONFIG_FILE" > /tmp/config.json && mv /tmp/config.json "$CONFIG_FILE"
+    
+    [ -n "$DRCLAW_FEISHU_APP_SECRET" ] && \
+        jq --arg v "$DRCLAW_FEISHU_APP_SECRET" '.feishu.app_secret = $v' "$CONFIG_FILE" > /tmp/config.json && mv /tmp/config.json "$CONFIG_FILE"
+    
+    [ -n "$DRCLAW_FEISHU_ENCRYPT_KEY" ] && \
+        jq --arg v "$DRCLAW_FEISHU_ENCRYPT_KEY" '.feishu.encrypt_key = $v' "$CONFIG_FILE" > /tmp/config.json && mv /tmp/config.json "$CONFIG_FILE"
+    
+    [ -n "$DRCLAW_FEISHU_VERIFICATION_TOKEN" ] && \
+        jq --arg v "$DRCLAW_FEISHU_VERIFICATION_TOKEN" '.feishu.verification_token = $v' "$CONFIG_FILE" > /tmp/config.json && mv /tmp/config.json "$CONFIG_FILE"
+    
+    echo "Config updated with environment variables"
+else
+    echo "jq not found, skipping environment variable updates"
+fi
 
-echo "Config written to $CONFIG_FILE"
 echo "Starting DrClaw daemon with web frontend on ${WEB_HOST}:${WEB_PORT}"
 
 # Run the daemon
